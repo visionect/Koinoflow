@@ -1,0 +1,133 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: koinoflow
+      POSTGRES_USER: koinoflow
+      POSTGRES_PASSWORD: koinoflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U koinoflow"]
+      interval: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ../backend:/app
+    ports:
+      - "8002:8000"
+    env_file:
+      - ../.env
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')\""]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    command: celery -A config worker -l info
+    volumes:
+      - ../backend:/app
+    env_file:
+      - ../.env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    command: celery -A config beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - ../backend:/app
+    env_file:
+      - ../.env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  mcp-server:
+    build:
+      context: ../mcp-server
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    env_file:
+      - ../.env
+    environment:
+      - KOINOFLOW_API_URL=http://backend:8000/api/v1
+      - MCP_SERVER_PORT=8001
+      - MCP_INTROSPECT_URL=http://backend:8000/oauth/introspect/
+      - AUTHORIZATION_SERVER_URL=http://localhost:8002
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/.well-known/oauth-protected-resource')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  mcp-server-dev:
+    build:
+      context: ../mcp-server
+      dockerfile: Dockerfile
+      target: dev
+    env_file:
+      - ../.env
+    environment:
+      - KOINOFLOW_API_URL=http://backend:8000/api/v1
+      - MCP_SERVER_PORT=8001
+      - MCP_INTROSPECT_URL=http://backend:8000/oauth/introspect/
+      - AUTHORIZATION_SERVER_URL=http://localhost:8002
+    profiles:
+      - dev
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    volumes:
+      - ../frontend:/app
+    ports:
+      - "5173:5173"
+    env_file:
+      - ../.env
+    environment:
+      - VITE_BACKEND_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:

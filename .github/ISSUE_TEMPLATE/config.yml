@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/visionect/Koinoflow/security/advisories/new
+    about: Report a security issue privately. Do not file public issues for vulnerabilities.
+  - name: Discussion / question
+    url: https://github.com/visionect/Koinoflow/discussions
+    about: Ask questions, share ideas, or get help from the community.

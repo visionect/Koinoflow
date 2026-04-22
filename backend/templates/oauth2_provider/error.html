@@ -1,0 +1,28 @@
+{% extends "base_auth.html" %}
+
+{% block title %}Error — Koinoflow{% endblock %}
+
+{% block content %}
+    <div class="text-center">
+        <div class="status-icon status-icon--error">
+            <svg viewBox="0 0 52 52">
+                <circle class="anim-circle" cx="26" cy="26" r="24" />
+                <line class="anim-x1" x1="18" y1="18" x2="34" y2="34" />
+                <line class="anim-x2" x1="34" y1="18" x2="18" y2="34" />
+            </svg>
+        </div>
+
+        <h1>Something went wrong</h1>
+        <p class="description">
+            {% if error %}
+                {{ error.description|default:error.error|default:"An unexpected error occurred during authorization." }}
+            {% else %}
+                An unexpected error occurred during authorization.
+            {% endif %}
+        </p>
+    </div>
+
+    <p class="text-muted text-center">
+        You can safely close this tab or <a href="/">return to Koinoflow</a>.
+    </p>
+{% endblock %}

@@ -1,0 +1,58 @@
+title = "Koinoflow gitleaks config"
+
+# Extend default gitleaks ruleset and add project-specific rules / allowlists.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "tfstate-file"
+description = "Terraform state file (may contain secrets)"
+regex = '''(?i)"terraform_version"\s*:\s*"'''
+path = '''\.tfstate(\.backup)?$'''
+tags = ["terraform", "state"]
+
+[[rules]]
+id = "tfvars-password"
+description = "Terraform tfvars with password/secret/token assignment"
+regex = '''(?im)^\s*(db_password|internal_task_token|[a-z_]*secret[a-z_]*)\s*=\s*"[^"]{8,}"'''
+path = '''\.tfvars$'''
+tags = ["terraform", "secret"]
+
+[[rules]]
+id = "gcp-service-account-json"
+description = "Google Cloud service account JSON key"
+regex = '''"type"\s*:\s*"service_account"'''
+tags = ["gcp", "service-account"]
+
+[[rules]]
+id = "env-file-secret"
+description = "Environment file with secret/token assignment"
+regex = '''(?i)(DJANGO_SECRET_KEY|INTERNAL_TASK_TOKEN|CONNECTOR_ENCRYPTION_KEY|DATABASE_URL|REDIS_URL|_CLIENT_SECRET|_API_KEY|PRIVATE_KEY)\s*=\s*[^ \n#]{10,}'''
+path = '''(^|/)\.env(\..+)?$'''
+tags = ["env", "secret"]
+
+[allowlist]
+description = "Project-wide allowlist"
+paths = [
+    '''(^|/)\.gitleaks\.toml$''',
+    '''(^|/)\.pre-commit-config\.yaml$''',
+    '''(^|/)\.github/workflows/[^/]+\.ya?ml$''',
+    '''(^|/)README\.md$''',
+    '''(^|/)\.env\.example$''',
+    '''(^|/)backend/config/settings/.*\.py$''',
+    # test fixtures use obvious dummy values
+    '''(^|/)(backend/tests|backend/.+/tests)/''',
+    '''(^|/)mcp-server/tests/''',
+    '''(^|/)frontend/src/__tests__/''',
+    # local .env is gitignored; gitleaks in --no-git mode still scans it
+    '''(^|/)\.env$''',
+    # Legitimate use of "service_account" string when constructing SA JSON from env vars
+    '''(^|/)backend/apps/connectors/capture/llm\.py$''',
+]
+regexes = [
+    # CI placeholder secret
+    '''ci-test-secret-key''',
+    # Local docker-compose default passwords
+    '''POSTGRES_PASSWORD=koinoflow''',
+    '''postgres://koinoflow:koinoflow@''',
+]

@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  secrets-scan:
+    name: Secrets scan (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+          GITLEAKS_ENABLE_SUMMARY: true
+      - name: Block tfstate / tfvars / SA JSON from being committed
+        run: |
+          set -e
+          bad=$(git ls-files | grep -E '(\.tfstate(\.backup)?$|(^|/)terraform\.tfvars$|(^|/)firebase-debug\.log$|(^|/)[^/]*-sa\.json$|(^|/)service-account.*\.json$|(^|/)gcp-[^/]*-key\.json$)' || true)
+          if [ -n "$bad" ]; then
+            echo "ERROR: These files must never be tracked in git:"
+            echo "$bad"
+            exit 1
+          fi
+
+  backend-lint-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: test_koinoflow
+          POSTGRES_USER: koinoflow
+          POSTGRES_PASSWORD: koinoflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r backend/requirements.txt
+      - run: ruff check backend/
+      - run: ruff format --check backend/
+      - run: pytest backend/ --tb=short
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.local
+          DATABASE_URL: postgres://koinoflow:koinoflow@localhost:5432/test_koinoflow
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: ci-test-secret-key
+
+  frontend-lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npx eslint src/
+        working-directory: frontend
+      - run: npx tsc --noEmit
+        working-directory: frontend
+      - run: npx vitest run --passWithNoTests
+        working-directory: frontend
+
+  mcp-server-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r mcp-server/requirements.txt -r mcp-server/requirements-dev.txt
+      - run: ruff check mcp-server/
+      - run: ruff format --check mcp-server/

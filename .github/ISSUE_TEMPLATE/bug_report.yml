@@ -1,0 +1,67 @@
+name: Bug report
+description: Report something that isn't working the way it should.
+title: "bug: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in as much
+        detail as you can — it speeds up triage a lot.
+
+        For security vulnerabilities, please follow the private disclosure
+        process described in [SECURITY.md](../../SECURITY.md) instead of
+        filing a public issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the bug. What did you expect vs. what actually happened?
+      placeholder: "When I click X, I expect Y but I get Z."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps for a maintainer to reproduce.
+      placeholder: |
+        1. Run `make up`
+        2. Visit /workspaces/...
+        3. Click "..."
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Koinoflow version / commit
+      description: Git commit SHA, release tag, or Docker image tag you're running.
+      placeholder: "v0.1.0 or ghcr.io/visionect/koinoflow/backend@sha256:..."
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      multiple: true
+      options:
+        - backend (Django API)
+        - frontend (React SPA)
+        - mcp-server (remote, Python)
+        - mcp-package (local, TypeScript / npm)
+        - docs / repo
+        - not sure
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, browser, Node / Python versions if relevant, deployment type (local Docker / self-hosted / other).
+      placeholder: "macOS 14.5, Chrome 128, local Docker Compose"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Paste relevant logs or attach screenshots. Redact any secrets or PII.
+      render: shell

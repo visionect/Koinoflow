@@ -1,0 +1,48 @@
+{% extends "base_auth.html" %}
+
+{% block title %}Authorize — Koinoflow{% endblock %}
+
+{% block content %}
+    {% if not error %}
+    <h1>{{ application.name }} wants to access your account</h1>
+    <p class="description">
+        This application is requesting permission to access your Koinoflow workspace
+        on your behalf.
+    </p>
+
+    <div class="scopes">
+        <h2>Permissions requested</h2>
+        <ul>
+            {% for scope in scopes_descriptions %}
+            <li>{{ scope }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <form method="post" action="{% url 'oauth2_provider:authorize' %}">
+        {% csrf_token %}
+        <div class="hidden">{{ form }}</div>
+
+        <div class="btn-row">
+            <button class="btn" type="submit" name="allow" value="false">Deny</button>
+            <button class="btn btn-primary" type="submit" name="allow" value="true">Authorize</button>
+        </div>
+    </form>
+
+    <p class="text-muted text-center mt-1">Logged in as {{ request.user.email }}</p>
+
+    {% else %}
+    <div class="text-center">
+        <div class="status-icon status-icon--error" style="margin-bottom:1.5rem;">
+            <svg viewBox="0 0 52 52">
+                <circle class="anim-circle" cx="26" cy="26" r="24" />
+                <line class="anim-x1" x1="18" y1="18" x2="34" y2="34" />
+                <line class="anim-x2" x1="34" y1="18" x2="18" y2="34" />
+            </svg>
+        </div>
+
+        <h1>Authorization error</h1>
+        <p class="description">{{ error }}</p>
+    </div>
+    {% endif %}
+{% endblock %}

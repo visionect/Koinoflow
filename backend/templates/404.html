@@ -1,0 +1,22 @@
+{% extends "base_auth.html" %}
+
+{% block title %}Not found — Koinoflow{% endblock %}
+
+{% block content %}
+    <div class="text-center">
+        <div class="status-icon status-icon--info">
+            <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+        </div>
+
+        <h1>Page not found</h1>
+        <p class="description">
+            The page you're looking for doesn't exist or has been moved.
+        </p>
+    </div>
+
+    <a href="/" class="btn">Go to dashboard</a>
+{% endblock %}

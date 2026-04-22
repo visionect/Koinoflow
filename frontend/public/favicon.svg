@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <!-- Cream background -->
+  <rect width="32" height="32" rx="7" fill="#f5f0e8"/>
+  <!-- Lower gold arm (behind navy bar) -->
+  <polygon points="9,16 9,20.5 26,27.5 26,23" fill="#e8a317"/>
+  <!-- Navy vertical bar -->
+  <rect x="4" y="3" width="7" height="26" rx="1.5" fill="#10375a"/>
+  <!-- Upper gold arm (in front of navy bar) -->
+  <polygon points="9,16 9,11.5 26,4.5 26,9" fill="#e8a317"/>
+</svg>

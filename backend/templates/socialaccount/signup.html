@@ -1,0 +1,48 @@
+{% extends "base_auth.html" %}
+
+{% block title %}Complete sign up — Koinoflow{% endblock %}
+
+{% block content %}
+    <h1>Complete your account</h1>
+    <p class="description">
+        You've signed in with a social account for the first time.
+        Please confirm the details below to finish creating your Koinoflow account.
+    </p>
+
+    {% if form.errors or form.non_field_errors %}
+    <div class="form-errors">
+        {% for error in form.non_field_errors %}
+        <p>{{ error }}</p>
+        {% endfor %}
+        {% for field in form %}
+        {% for error in field.errors %}
+        <p>{{ field.label }}: {{ error }}</p>
+        {% endfor %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <form method="post" action="{% url 'socialaccount_signup' %}">
+        {% csrf_token %}
+        {% if redirect_field_value %}
+        <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">
+        {% endif %}
+
+        {% for field in form %}
+        {% if not field.is_hidden %}
+        <div class="form-group">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            <input type="{{ field.field.widget.input_type|default:'text' }}"
+                   name="{{ field.html_name }}"
+                   id="{{ field.id_for_label }}"
+                   value="{{ field.value|default:'' }}"
+                   {% if field.field.required %}required{% endif %}>
+        </div>
+        {% else %}
+        {{ field }}
+        {% endif %}
+        {% endfor %}
+
+        <button type="submit" class="btn btn-primary">Create account</button>
+    </form>
+{% endblock %}

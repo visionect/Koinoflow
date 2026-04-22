@@ -1,0 +1,32 @@
+{% extends "base_auth.html" %}
+
+{% block title %}Verify email — Koinoflow{% endblock %}
+
+{% block content %}
+    <div class="text-center">
+        <div class="status-icon status-icon--info" style="margin-bottom:1.5rem;">
+            <svg viewBox="0 0 24 24">
+                <rect x="2" y="4" width="20" height="16" rx="2" />
+                <polyline points="22,4 12,13 2,4" />
+            </svg>
+        </div>
+
+        <h1>Confirm your email</h1>
+    </div>
+
+    {% if confirmation %}
+    <p class="description text-center">
+        Please confirm that <strong>{{ confirmation.email_address.email }}</strong> is your email address.
+    </p>
+
+    <form method="post" action="{% url 'account_confirm_email' confirmation.key %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary">Confirm email</button>
+    </form>
+    {% else %}
+    <p class="description text-center">
+        This confirmation link is invalid or has expired. Please request a new one.
+    </p>
+    <a href="{% url 'account_login' %}" class="btn btn-primary">Back to sign in</a>
+    {% endif %}
+{% endblock %}

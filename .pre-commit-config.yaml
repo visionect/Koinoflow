@@ -1,0 +1,29 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        name: Detect hardcoded secrets (gitleaks)
+        args: ["protect", "--staged", "--redact", "-c", ".gitleaks.toml"]
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: detect-private-key
+      - id: check-merge-conflict
+      - id: check-yaml
+        exclude: "^(infra/terraform/.*\\.yml|\\.github/workflows/.*\\.yml)$"
+
+  - repo: local
+    hooks:
+      - id: no-tfstate
+        name: Block committing terraform state / tfvars / SA JSON / firebase logs
+        language: system
+        # Always fail when any matching file is staged. pre-commit passes the
+        # list of matching staged files as arguments; if the hook is invoked
+        # at all, one or more forbidden files were staged.
+        entry: bash -c 'echo "ERROR: These files must never be committed:"; for f in "$@"; do echo "  - $f"; done; echo "Remove them with: git rm --cached <file>"; exit 1' --
+        files: '(\.tfstate(\.backup)?$|(^|/)terraform\.tfvars$|(^|/)firebase-debug\.log$|(^|/)[^/]*-sa\.json$|(^|/)service-account.*\.json$|(^|/)gcp-[^/]*-key\.json$)'
+        exclude: '(^|/)\.gitleaks\.toml$'

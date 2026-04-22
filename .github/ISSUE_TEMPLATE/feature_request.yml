@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest an enhancement or new capability.
+title: "feat: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea. Big feature ideas are easier to act on
+        when you describe the *problem* first and only then propose a
+        solution — that way maintainers can suggest alternatives.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Who is this for, and what pain does it remove?
+      placeholder: "As an admin, I want to... because today I have to..."
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Optional. What do you imagine the UX / API looking like?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Are there workarounds today? Why are they insufficient?
+  - type: dropdown
+    id: component
+    attributes:
+      label: Which component?
+      multiple: true
+      options:
+        - backend (Django API)
+        - frontend (React SPA)
+        - mcp-server (remote, Python)
+        - mcp-package (local, TypeScript / npm)
+        - docs / repo
+        - cross-cutting
+    validations:
+      required: true

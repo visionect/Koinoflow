@@ -1,0 +1,25 @@
+{% extends "base_auth.html" %}
+
+{% block title %}Check your email — Koinoflow{% endblock %}
+
+{% block content %}
+    <div class="text-center">
+        <div class="status-icon status-icon--info" style="margin-bottom:1.5rem;">
+            <svg viewBox="0 0 24 24">
+                <rect x="2" y="4" width="20" height="16" rx="2" />
+                <polyline points="22,4 12,13 2,4" />
+            </svg>
+        </div>
+
+        <h1>Check your email</h1>
+        <p class="description">
+            We've sent a verification link to your email address.
+            Please check your inbox and click the link to verify your account.
+        </p>
+    </div>
+
+    <p class="text-muted text-center mt-1">
+        Didn't receive the email? Check your spam folder or
+        <a href="{% url 'account_login' %}">try again</a>.
+    </p>
+{% endblock %}

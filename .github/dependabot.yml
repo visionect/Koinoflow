@@ -1,0 +1,54 @@
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      django:
+        patterns: ["django*"]
+      dev-dependencies:
+        patterns: ["pytest*", "ruff", "mypy*"]
+
+  - package-ecosystem: pip
+    directory: /mcp-server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      react:
+        patterns: ["react", "react-dom", "@types/react*"]
+      tanstack:
+        patterns: ["@tanstack/*"]
+      tiptap:
+        patterns: ["@tiptap/*"]
+      dev-dependencies:
+        patterns: ["eslint*", "prettier*", "vitest*", "@playwright/*", "typescript"]
+
+  - package-ecosystem: npm
+    directory: /mcp-package
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /mcp-server
+    schedule:
+      interval: weekly
