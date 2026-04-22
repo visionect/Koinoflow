@@ -1,6 +1,20 @@
-# Koinoflow
+<p align="center">
+  <img src=".github/assets/og-image.png" alt="Koinoflow" width="720" />
+</p>
 
-**Version-controlled operational processes for humans and AI agents.**
+<h1 align="center">Koinoflow</h1>
+
+<p align="center">
+  <strong>Version-controlled operational processes for humans and AI agents.</strong>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg" /></a>
+  <a href="https://github.com/visionect/Koinoflow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/visionect/Koinoflow/actions/workflows/ci.yml/badge.svg" /></a>
+  <a href="https://github.com/visionect/Koinoflow/pkgs/container/koinoflow%2Fbackend"><img alt="GHCR" src="https://img.shields.io/badge/ghcr.io-visionect%2Fkoinoflow-blue?logo=docker" /></a>
+</p>
+
+---
 
 Koinoflow is a B2B platform where an organization writes, versions, and
 governs its operational processes — then exposes that approved knowledge to
@@ -71,7 +85,8 @@ make up         # starts backend, frontend, postgres, redis, mcp-server
 
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000/api/v1
-- API docs: http://localhost:8000/api/v1/docs
+- API docs (Swagger-style): http://localhost:8000/api/v1/docs
+- Django admin: http://localhost:8000/admin/ (sign in with the superuser `make setup` created for you)
 - MCP server: http://localhost:8001/mcp
 
 Other common targets — run `make help` for the full list:
