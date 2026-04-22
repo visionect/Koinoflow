@@ -5,10 +5,15 @@
 <h1 align="center">Koinoflow</h1>
 
 <p align="center">
+  <em>Koino (κοινό) · shared knowledge in motion.</em>
+</p>
+
+<p align="center">
   <strong>Version-controlled operational processes for humans and AI agents.</strong>
 </p>
 
 <p align="center">
+  <a href="https://koinoflow.com"><img alt="Website" src="https://img.shields.io/badge/website-koinoflow.com-0ea5e9" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg" /></a>
   <a href="https://github.com/visionect/Koinoflow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/visionect/Koinoflow/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="https://github.com/visionect/Koinoflow/pkgs/container/koinoflow%2Fbackend"><img alt="GHCR" src="https://img.shields.io/badge/ghcr.io-visionect%2Fkoinoflow-blue?logo=docker" /></a>
@@ -173,8 +178,17 @@ Koinoflow is released under the [MIT License](LICENSE).
 The **Koinoflow** name and logo are trademarks of Visionect d.o.o. — see
 [TRADEMARK.md](TRADEMARK.md) for guidance on acceptable use.
 
+## Hosted vs. self-hosted
+
+You can run Koinoflow entirely on your own infrastructure using the
+instructions above — that's the default mode and it's free forever under
+MIT. If you'd rather not operate it yourself, a managed hosted service is
+available at [koinoflow.com](https://koinoflow.com).
+
 ## Sponsorship
 
 Active development of Koinoflow is sponsored by
-[Visionect](https://www.visionect.com). The project remains open-source;
-sponsorship funds full-time engineering and community support.
+[Visionect](https://www.visionect.com), which also operates the hosted
+service at [koinoflow.com](https://koinoflow.com). The project remains
+open-source; sponsorship funds full-time engineering and community
+support.
