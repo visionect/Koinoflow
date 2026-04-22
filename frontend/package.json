@@ -22,7 +22,7 @@
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "date-fns": "4.1.0",
-    "diff": "8.0.4",
+    "diff": "9.0.0",
     "js-yaml": "4.1.1",
     "jszip": "^3.10.1",
     "lucide-react": "1.7.0",
