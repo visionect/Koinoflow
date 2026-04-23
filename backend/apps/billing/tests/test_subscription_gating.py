@@ -1,7 +1,7 @@
 from datetime import timedelta
 
 import pytest
-from django.test import Client, override_settings
+from django.test import Client
 from django.utils import timezone
 
 from apps.accounts.tests.factories import UserFactory
@@ -16,9 +16,12 @@ from apps.orgs.enums import RoleChoices
 from apps.orgs.tests.factories import MembershipFactory
 
 
-@override_settings(ENABLE_BILLING=True)
 @pytest.mark.django_db
 class TestMeSubscriptionStatus:
+    @pytest.fixture(autouse=True)
+    def enable_billing(self, settings):
+        settings.ENABLE_BILLING = True
+
     def test_me_returns_null_when_no_subscription(self):
         membership = MembershipFactory(role=RoleChoices.ADMIN)
         client = Client()
@@ -143,9 +146,12 @@ class TestMeSubscriptionStatus:
         assert sub.status == SubscriptionStatus.IN_TRIAL
 
 
-@override_settings(ENABLE_BILLING=False)
 @pytest.mark.django_db
 class TestMeBillingDisabled:
+    @pytest.fixture(autouse=True)
+    def disable_billing(self, settings):
+        settings.ENABLE_BILLING = False
+
     def test_me_reports_billing_disabled(self):
         membership = MembershipFactory(role=RoleChoices.ADMIN)
         client = Client()

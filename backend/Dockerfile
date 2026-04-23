@@ -14,6 +14,7 @@ COPY . .
 ENV DJANGO_SETTINGS_MODULE=config.settings.production
 ENV SECRET_KEY=build-time-secret
 ENV DATABASE_URL=postgres://koinoflow:koinoflow@localhost:5432/koinoflow
+ENV FRONTEND_URL=http://localhost:5173
 ENV PORT=8080
 
 RUN python manage.py collectstatic --noinput
