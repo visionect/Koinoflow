@@ -10,6 +10,7 @@ from oauth2_provider.models import AccessToken, Application
 
 from apps.orgs.models import ApiKey, CoreSettings
 from apps.orgs.tests.factories import DepartmentFactory, TeamFactory
+from apps.processes.discovery import build_indexed_text
 from apps.processes.enums import StatusChoices, VisibilityChoices
 from apps.processes.files import resolve_files
 from apps.processes.models import Process, ProcessDiscoveryEmbedding, ProcessVersion, VersionFile
@@ -529,6 +530,24 @@ class TestDiscoverProcesses:
         process.current_version = version
         process.save(update_fields=["current_version"])
         return process, version
+
+    def test_indexed_text_uses_core_slugs(self, admin_membership):
+        ws = admin_membership.workspace
+        team = TeamFactory(workspace=ws, slug="platform")
+        dept = DepartmentFactory(team=team, slug="sre")
+        _, version = self._published_process(
+            dept,
+            slug="incident-response",
+            title="Incident Response",
+            content="# Incident\n\nTriage the outage.",
+        )
+
+        indexed_text = build_indexed_text(version)
+
+        assert "Team: " in indexed_text
+        assert "(platform)" in indexed_text
+        assert "Department: " in indexed_text
+        assert "(sre)" in indexed_text
 
     def test_discover_processes_uses_metadata_when_embeddings_unavailable(
         self, auth_client, admin_membership, monkeypatch

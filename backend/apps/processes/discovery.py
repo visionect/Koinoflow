@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from django.conf import settings
 from django.utils import timezone
 
+from apps.orgs.enums import EntityType
+from apps.orgs.models import CoreSlug
 from apps.processes.enums import StatusChoices
 from apps.processes.models import ProcessDiscoveryEmbedding, ProcessVersion
 
@@ -57,17 +59,28 @@ def normalize_metadata(raw) -> dict:
     return result
 
 
+def _get_slug(entity_type: str, entity_id) -> str:
+    return (
+        CoreSlug.objects.filter(entity_type=entity_type, entity_id=entity_id)
+        .values_list("slug", flat=True)
+        .first()
+        or ""
+    )
+
+
 def build_indexed_text(version: ProcessVersion) -> str:
     process = version.process
     department = process.department
     team = department.team
     metadata = normalize_metadata(version.koinoflow_metadata)
+    team_slug = _get_slug(EntityType.TEAM, team.id)
+    department_slug = _get_slug(EntityType.DEPARTMENT, department.id)
     parts = [
         f"Title: {process.title}",
         f"Slug: {process.slug}",
         f"Description: {process.description}",
-        f"Team: {team.name} ({team.slug})",
-        f"Department: {department.name} ({department.slug})",
+        f"Team: {team.name} ({team_slug})",
+        f"Department: {department.name} ({department_slug})",
         f"Retrieval keywords: {', '.join(metadata['retrieval_keywords'])}",
         f"Audience: {', '.join(metadata['audience'])}",
         f"Prerequisites: {', '.join(metadata['prerequisites'])}",
