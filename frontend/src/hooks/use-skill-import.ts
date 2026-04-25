@@ -55,14 +55,62 @@ const EXT_TO_FILE_TYPE: Record<string, string> = {
   htm: "html",
   yaml: "yaml",
   yml: "yaml",
+  json: "json",
   js: "javascript",
   ts: "typescript",
   sh: "shell",
+  png: "image",
+  jpg: "image",
+  jpeg: "image",
+  gif: "image",
+  webp: "image",
+  svg: "image",
+  pdf: "pdf",
 }
+
+const TEXT_FILE_TYPES = new Set([
+  "python",
+  "markdown",
+  "html",
+  "yaml",
+  "json",
+  "javascript",
+  "typescript",
+  "shell",
+  "text",
+])
 
 function detectFileType(filename: string): string {
   const ext = filename.includes(".") ? (filename.split(".").pop()?.toLowerCase() ?? "") : ""
-  return EXT_TO_FILE_TYPE[ext] ?? "text"
+  return EXT_TO_FILE_TYPE[ext] ?? "binary"
+}
+
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  let binary = ""
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
+}
+
+function detectMimeType(filename: string, fileType: string): string {
+  const ext = filename.includes(".") ? (filename.split(".").pop()?.toLowerCase() ?? "") : ""
+  const byExt: Record<string, string> = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    jpeg: "image/jpeg",
+    gif: "image/gif",
+    webp: "image/webp",
+    svg: "image/svg+xml",
+    pdf: "application/pdf",
+    json: "application/json",
+    md: "text/markdown",
+    html: "text/html",
+    htm: "text/html",
+    yaml: "application/yaml",
+    yml: "application/yaml",
+    sh: "text/x-shellscript",
+  }
+  return byExt[ext] ?? (TEXT_FILE_TYPES.has(fileType) ? "text/plain" : "application/octet-stream")
 }
 
 export function useSkillImport(onImport: (data: SkillImportData) => void) {
@@ -99,11 +147,26 @@ export function useSkillImport(onImport: (data: SkillImportData) => void) {
             const raw = await zipEntry.async("text")
             koinoflowMetadata = parseKoinoflowMetadata(raw)
           } else if (relPath) {
-            const content = await zipEntry.async("text")
+            const fileType = detectFileType(relPath)
+            const buffer = await zipEntry.async("arraybuffer")
+            const mimeType = detectMimeType(relPath, fileType)
+            let isText = TEXT_FILE_TYPES.has(fileType)
+            let content: string | null = null
+            if (isText) {
+              try {
+                content = new TextDecoder("utf-8", { fatal: true }).decode(buffer)
+              } catch {
+                isText = false
+              }
+            }
             supportFiles.push({
               path: relPath,
               content,
-              file_type: detectFileType(relPath),
+              content_base64: isText ? null : arrayBufferToBase64(buffer),
+              file_type: fileType,
+              mime_type: mimeType,
+              encoding: isText ? "utf-8" : "base64",
+              size_bytes: buffer.byteLength,
             })
           }
         }

@@ -138,11 +138,13 @@ function resetFileEditorState(
   files: VersionFile[] | undefined,
   setEditFileMetas: React.Dispatch<React.SetStateAction<VersionFile[]>>,
   setEditFileContents: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+  setEditFilePayloads: React.Dispatch<React.SetStateAction<Record<string, VersionFileInput>>>,
   setFilesModified: React.Dispatch<React.SetStateAction<boolean>>,
   setSelectedFilePath: React.Dispatch<React.SetStateAction<string | null>>,
 ) {
   setEditFileMetas(files ?? [])
   setEditFileContents({})
+  setEditFilePayloads({})
   setFilesModified(false)
   setSelectedFilePath(null)
 }
@@ -240,14 +242,21 @@ export function ProcessViewPage() {
             id: `import-${i}`,
             path: f.path,
             file_type: f.file_type,
-            size_bytes: new Blob([f.content]).size,
+            mime_type: f.mime_type ?? "application/octet-stream",
+            encoding: f.encoding ?? (f.content_base64 ? "base64" : "utf-8"),
+            size_bytes:
+              f.size_bytes ??
+              (f.content !== undefined && f.content !== null ? new Blob([f.content]).size : 0),
           })),
         )
         const contents: Record<string, string> = {}
+        const payloads: Record<string, VersionFileInput> = {}
         for (const f of data.supportFiles) {
-          contents[f.path] = f.content
+          contents[f.path] = f.content ?? ""
+          payloads[f.path] = f
         }
         setEditFileContents(contents)
+        setEditFilePayloads(payloads)
         setFilesModified(true)
       }
       setIsEditing(true)
@@ -262,6 +271,9 @@ export function ProcessViewPage() {
   // File state for support files
   const [editFileMetas, setEditFileMetas] = React.useState<VersionFile[]>([])
   const [editFileContents, setEditFileContents] = React.useState<Record<string, string>>({})
+  const [editFilePayloads, setEditFilePayloads] = React.useState<Record<string, VersionFileInput>>(
+    {},
+  )
   const [filesModified, setFilesModified] = React.useState(false)
   const [selectedFilePath, setSelectedFilePath] = React.useState<string | null>(null)
   const [activeTab, setActiveTab] = React.useState<"process" | "files">("process")
@@ -362,6 +374,7 @@ export function ProcessViewPage() {
         displayVersion.files,
         setEditFileMetas,
         setEditFileContents,
+        setEditFilePayloads,
         setFilesModified,
         setSelectedFilePath,
       )
@@ -372,7 +385,19 @@ export function ProcessViewPage() {
     if (editingFileQuery.data && selectedFilePath && isEditing) {
       setEditFileContents((prev) => ({
         ...prev,
-        [selectedFilePath]: editingFileQuery.data!.content,
+        [selectedFilePath]: editingFileQuery.data!.content ?? "",
+      }))
+      setEditFilePayloads((prev) => ({
+        ...prev,
+        [selectedFilePath]: {
+          path: editingFileQuery.data!.path,
+          content: editingFileQuery.data!.content,
+          content_base64: editingFileQuery.data!.content_base64,
+          file_type: editingFileQuery.data!.file_type,
+          mime_type: editingFileQuery.data!.mime_type,
+          encoding: editingFileQuery.data!.encoding,
+          size_bytes: editingFileQuery.data!.size_bytes,
+        },
       }))
     }
   }, [editingFileQuery.data, selectedFilePath, isEditing])
@@ -416,15 +441,32 @@ export function ProcessViewPage() {
       if (filesModified) {
         const allFiles: VersionFileInput[] = []
         for (const meta of editFileMetas) {
-          let content = editFileContents[meta.path]
-          if (content === undefined && viewVersionNumber !== null) {
+          let payload = editFilePayloads[meta.path]
+          if (!payload && editFileContents[meta.path] !== undefined) {
+            payload = {
+              path: meta.path,
+              content: editFileContents[meta.path],
+              file_type: meta.file_type,
+              mime_type: meta.mime_type,
+              encoding: meta.encoding,
+            }
+          }
+          if (!payload && viewVersionNumber !== null) {
             const detail = await apiFetch<VersionFileDetail>(
               `/processes/${processSlug}/versions/${viewVersionNumber}/files/${encodeURIComponent(meta.path)}`,
             )
-            content = detail.content
+            payload = {
+              path: detail.path,
+              content: detail.content,
+              content_base64: detail.content_base64,
+              file_type: detail.file_type,
+              mime_type: detail.mime_type,
+              encoding: detail.encoding,
+              size_bytes: detail.size_bytes,
+            }
           }
-          if (content !== undefined) {
-            allFiles.push({ path: meta.path, content, file_type: meta.file_type })
+          if (payload) {
+            allFiles.push(payload)
           }
         }
         filesPayload = allFiles
@@ -466,6 +508,7 @@ export function ProcessViewPage() {
     createVersion,
     editFileContents,
     editFileMetas,
+    editFilePayloads,
     filesModified,
     frontmatter,
     hasUnsavedChanges,
@@ -538,6 +581,7 @@ export function ProcessViewPage() {
       displayVersion?.files,
       setEditFileMetas,
       setEditFileContents,
+      setEditFilePayloads,
       setFilesModified,
       setSelectedFilePath,
     )
@@ -887,15 +931,28 @@ export function ProcessViewPage() {
                     onFileAdd={(file) => {
                       setEditFileMetas((prev) => [
                         ...prev,
-                        { id: "", path: file.path, file_type: file.file_type, size_bytes: 0 },
+                        {
+                          id: "",
+                          path: file.path,
+                          file_type: file.file_type,
+                          mime_type: file.mime_type ?? "text/plain",
+                          encoding: file.encoding ?? "utf-8",
+                          size_bytes: 0,
+                        },
                       ])
-                      setEditFileContents((prev) => ({ ...prev, [file.path]: file.content }))
+                      setEditFileContents((prev) => ({ ...prev, [file.path]: file.content ?? "" }))
+                      setEditFilePayloads((prev) => ({ ...prev, [file.path]: file }))
                       setSelectedFilePath(file.path)
                       setFilesModified(true)
                     }}
                     onFileDelete={(path) => {
                       setEditFileMetas((prev) => prev.filter((f) => f.path !== path))
                       setEditFileContents((prev) => {
+                        const next = { ...prev }
+                        delete next[path]
+                        return next
+                      })
+                      setEditFilePayloads((prev) => {
                         const next = { ...prev }
                         delete next[path]
                         return next
@@ -935,9 +992,32 @@ export function ProcessViewPage() {
                           editFileMetas.find((f) => f.path === selectedFilePath)?.file_type ??
                           "text"
                         }
+                        mimeType={
+                          editFileMetas.find((f) => f.path === selectedFilePath)?.mime_type ??
+                          editFilePayloads[selectedFilePath]?.mime_type
+                        }
+                        contentBase64={editFilePayloads[selectedFilePath]?.content_base64}
+                        sizeBytes={
+                          editFileMetas.find((f) => f.path === selectedFilePath)?.size_bytes
+                        }
                         readOnly={false}
                         onChange={(path, content) => {
                           setEditFileContents((prev) => ({ ...prev, [path]: content }))
+                          setEditFilePayloads((prev) => ({
+                            ...prev,
+                            [path]: {
+                              path,
+                              content,
+                              content_base64: null,
+                              file_type:
+                                editFileMetas.find((f) => f.path === path)?.file_type ?? "text",
+                              mime_type:
+                                editFileMetas.find((f) => f.path === path)?.mime_type ??
+                                "text/plain",
+                              encoding: "utf-8",
+                              size_bytes: new TextEncoder().encode(content).length,
+                            },
+                          }))
                           setEditFileMetas((prev) =>
                             prev.map((f) =>
                               f.path === path
@@ -1049,6 +1129,9 @@ export function ProcessViewPage() {
                                 path={viewingFileQuery.data.path}
                                 content={viewingFileQuery.data.content}
                                 fileType={viewingFileQuery.data.file_type}
+                                mimeType={viewingFileQuery.data.mime_type}
+                                contentBase64={viewingFileQuery.data.content_base64}
+                                sizeBytes={viewingFileQuery.data.size_bytes}
                                 readOnly={true}
                               />
                             ) : null

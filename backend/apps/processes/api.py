@@ -1,6 +1,10 @@
+import base64
+import binascii
 import difflib
+import hashlib
 import io
 import logging
+import mimetypes
 import posixpath
 import re
 import zipfile
@@ -34,6 +38,8 @@ from apps.processes.enums import StatusChoices, VisibilityChoices
 from apps.processes.files import (
     compute_file_delta,
     detect_file_type,
+    file_bytes,
+    is_text_file,
     resolve_file_list,
     resolve_files,
 )
@@ -43,7 +49,22 @@ logger = logging.getLogger(__name__)
 
 router = Router(tags=["processes"])
 
-VERSION_FILE_TYPE_PATTERN = r"^(python|markdown|html|yaml|javascript|typescript|shell|text|other)$"
+VERSION_FILE_TYPE_PATTERN = (
+    r"^(python|markdown|html|yaml|json|javascript|typescript|shell|image|pdf|binary|text|other)$"
+)
+MAX_SKILL_IMPORT_BYTES = 2 * 1024 * 1024
+MAX_SUPPORT_FILE_BYTES = 1 * 1024 * 1024
+TEXT_FILE_TYPES = {
+    "python",
+    "markdown",
+    "html",
+    "yaml",
+    "json",
+    "javascript",
+    "typescript",
+    "shell",
+    "text",
+}
 
 
 # ── Schemas ──────────────────────────────────────────────────────────────
@@ -53,17 +74,23 @@ class VersionFileOut(Schema):
     id: str
     path: str
     file_type: str
+    mime_type: str
+    encoding: str
     size_bytes: int
 
 
 class VersionFileDetailOut(VersionFileOut):
-    content: str
+    content: str | None = None
+    content_base64: str | None = None
 
 
 class VersionFileIn(Schema):
     path: str = Field(pattern=r"^[a-zA-Z0-9_\-./]+$", max_length=500)
-    content: str
+    content: str | None = None
+    content_base64: str | None = None
     file_type: str = Field(default="text", pattern=VERSION_FILE_TYPE_PATTERN)
+    mime_type: str | None = Field(default=None, max_length=100)
+    encoding: str | None = Field(default=None, max_length=20)
 
 
 class DiffHunk(Schema):
@@ -347,36 +374,48 @@ def _compute_file_diff_entries(old_files, new_files):
         in_new = path in new_files
         if in_new and not in_old:
             f = new_files[path]
+            hunks = None
+            if is_text_file(f):
+                hunks = _compute_file_hunks("", file_bytes(f).decode("utf-8"))
             entries.append(
                 {
                     "path": path,
                     "status": "added",
                     "old_size": None,
                     "new_size": f.size_bytes,
-                    "hunks": _compute_file_hunks("", f.content),
+                    "hunks": hunks,
                 }
             )
         elif in_old and not in_new:
             f = old_files[path]
+            hunks = None
+            if is_text_file(f):
+                hunks = _compute_file_hunks(file_bytes(f).decode("utf-8"), "")
             entries.append(
                 {
                     "path": path,
                     "status": "deleted",
                     "old_size": f.size_bytes,
                     "new_size": None,
-                    "hunks": _compute_file_hunks(f.content, ""),
+                    "hunks": hunks,
                 }
             )
-        elif old_files[path].content != new_files[path].content:
+        elif file_bytes(old_files[path]) != file_bytes(new_files[path]):
             old_f = old_files[path]
             new_f = new_files[path]
+            hunks = None
+            if is_text_file(old_f) and is_text_file(new_f):
+                hunks = _compute_file_hunks(
+                    file_bytes(old_f).decode("utf-8"),
+                    file_bytes(new_f).decode("utf-8"),
+                )
             entries.append(
                 {
                     "path": path,
                     "status": "modified",
                     "old_size": old_f.size_bytes,
                     "new_size": new_f.size_bytes,
-                    "hunks": _compute_file_hunks(old_f.content, new_f.content),
+                    "hunks": hunks,
                 }
             )
     return entries
@@ -393,6 +432,138 @@ def _normalize_support_file_path(path: str) -> str:
     ):
         raise HttpError(400, "Archive contains an invalid support file path")
     return normalized
+
+
+def _format_bytes(size: int) -> str:
+    if size >= 1024 * 1024:
+        return f"{size / (1024 * 1024):.1f} MB"
+    if size >= 1024:
+        return f"{size / 1024:.1f} KB"
+    return f"{size} bytes"
+
+
+def _validate_support_file_size(path: str, size: int):
+    if size > MAX_SUPPORT_FILE_BYTES:
+        raise HttpError(
+            413,
+            (
+                f"File {path} is {_format_bytes(size)}; "
+                f"max per file is {_format_bytes(MAX_SUPPORT_FILE_BYTES)}"
+            ),
+        )
+
+
+def _guess_mime_type(path: str, file_type: str) -> str:
+    guessed, _encoding = mimetypes.guess_type(path)
+    if guessed:
+        return guessed
+    defaults = {
+        "python": "text/x-python",
+        "markdown": "text/markdown",
+        "html": "text/html",
+        "yaml": "application/yaml",
+        "json": "application/json",
+        "javascript": "text/javascript",
+        "typescript": "text/typescript",
+        "shell": "text/x-shellscript",
+        "text": "text/plain",
+        "pdf": "application/pdf",
+        "image": "application/octet-stream",
+    }
+    return defaults.get(file_type, "application/octet-stream")
+
+
+def _is_text_payload(file_type: str, mime_type: str, data: bytes) -> bool:
+    if file_type in TEXT_FILE_TYPES or mime_type.startswith("text/"):
+        try:
+            data.decode("utf-8")
+        except UnicodeDecodeError:
+            return False
+        return True
+    return False
+
+
+def _file_entry(
+    *,
+    path: str,
+    data: bytes,
+    file_type: str | None = None,
+    mime_type: str | None = None,
+    encoding: str | None = None,
+) -> dict:
+    normalized_path = _normalize_support_file_path(path)
+    _validate_support_file_size(normalized_path, len(data))
+    resolved_file_type = file_type or detect_file_type(normalized_path)
+    resolved_mime = mime_type or _guess_mime_type(normalized_path, resolved_file_type)
+    text_payload = _is_text_payload(resolved_file_type, resolved_mime, data)
+    resolved_encoding = encoding or ("utf-8" if text_payload else "base64")
+    content = data.decode("utf-8") if text_payload else ""
+    return {
+        "path": normalized_path,
+        "content": content,
+        "content_bytes": data,
+        "file_type": resolved_file_type,
+        "mime_type": resolved_mime,
+        "encoding": resolved_encoding,
+        "sha256": hashlib.sha256(data).hexdigest() if data else "",
+        "size_bytes": len(data),
+    }
+
+
+def _file_entry_from_payload(payload: dict) -> dict:
+    path = payload["path"]
+    if payload.get("content_base64") is not None:
+        try:
+            data = base64.b64decode(payload["content_base64"], validate=True)
+        except (binascii.Error, ValueError):
+            raise HttpError(400, f"File {path} has invalid base64 content")
+    elif payload.get("content") is not None:
+        data = payload.get("content", "").encode("utf-8")
+    else:
+        raise HttpError(400, f"File {path} must include content or content_base64")
+    return _file_entry(
+        path=path,
+        data=data,
+        file_type=payload.get("file_type"),
+        mime_type=payload.get("mime_type"),
+        encoding=payload.get("encoding"),
+    )
+
+
+def _version_file_from_entry(version, entry: dict, *, is_deleted=False) -> VersionFile:
+    data = b"" if is_deleted else entry.get("content_bytes", b"")
+    return VersionFile(
+        version=version,
+        path=entry["path"],
+        content="" if is_deleted else entry.get("content", ""),
+        content_bytes=data,
+        file_type=entry.get("file_type", "text"),
+        mime_type=entry.get("mime_type", "text/plain"),
+        encoding=entry.get("encoding", "utf-8"),
+        sha256=entry.get("sha256", ""),
+        size_bytes=0 if is_deleted else entry.get("size_bytes", len(data)),
+        is_deleted=is_deleted,
+    )
+
+
+def _file_detail(f: VersionFile) -> dict:
+    data = file_bytes(f)
+    content = None
+    if is_text_file(f):
+        try:
+            content = data.decode("utf-8")
+        except UnicodeDecodeError:
+            content = None
+    return {
+        "id": str(f.id),
+        "path": f.path,
+        "file_type": f.file_type,
+        "mime_type": f.mime_type,
+        "encoding": f.encoding,
+        "size_bytes": f.size_bytes,
+        "content": content,
+        "content_base64": base64.b64encode(data).decode("ascii") if content is None else None,
+    }
 
 
 def _compute_needs_audit(process, audit_settings_cache=None):
@@ -890,7 +1061,7 @@ def create_version(request, slug: str, payload: CreateVersionIn):
         )
 
         if payload.files is not None:
-            submitted = [f.model_dump() for f in payload.files]
+            submitted = [_file_entry_from_payload(f.model_dump()) for f in payload.files]
             creates, tombstones = compute_file_delta(
                 process.id,
                 latest.version_number if latest else None,
@@ -898,27 +1069,10 @@ def create_version(request, slug: str, payload: CreateVersionIn):
             )
             file_rows = []
             for f in creates:
-                content = f.get("content", "")
-                file_rows.append(
-                    VersionFile(
-                        version=version,
-                        path=f["path"],
-                        content=content,
-                        file_type=f.get("file_type", "text"),
-                        size_bytes=len(content.encode("utf-8")),
-                        is_deleted=False,
-                    )
-                )
+                file_rows.append(_version_file_from_entry(version, f))
             for t in tombstones:
                 file_rows.append(
-                    VersionFile(
-                        version=version,
-                        path=t["path"],
-                        content="",
-                        file_type="text",
-                        size_bytes=0,
-                        is_deleted=True,
-                    )
+                    _version_file_from_entry(version, {"path": t["path"]}, is_deleted=True)
                 )
             if file_rows:
                 VersionFile.objects.bulk_create(file_rows)
@@ -1019,7 +1173,16 @@ def revert_version(request, slug: str, target_version_number: int, payload: Reve
 
         target_files = resolve_files(process.id, target_version_number)
         submitted_files = [
-            {"path": f.path, "content": f.content, "file_type": f.file_type}
+            {
+                "path": f.path,
+                "content": f.content,
+                "content_bytes": file_bytes(f),
+                "file_type": f.file_type,
+                "mime_type": f.mime_type,
+                "encoding": f.encoding,
+                "sha256": f.sha256,
+                "size_bytes": f.size_bytes,
+            }
             for f in target_files.values()
         ]
 
@@ -1033,7 +1196,7 @@ def revert_version(request, slug: str, target_version_number: int, payload: Reve
         if content_same:
             latest_files = resolve_files(process.id, latest.version_number)
             if set(target_files.keys()) == set(latest_files.keys()) and all(
-                target_files[p].content == latest_files[p].content for p in target_files
+                file_bytes(target_files[p]) == file_bytes(latest_files[p]) for p in target_files
             ):
                 raise HttpError(409, "No changes detected since the last version")
 
@@ -1054,27 +1217,10 @@ def revert_version(request, slug: str, target_version_number: int, payload: Reve
 
         file_rows = []
         for f in creates:
-            content = f.get("content", "")
-            file_rows.append(
-                VersionFile(
-                    version=new_version,
-                    path=f["path"],
-                    content=content,
-                    file_type=f.get("file_type", "text"),
-                    size_bytes=len(content.encode("utf-8")),
-                    is_deleted=False,
-                )
-            )
+            file_rows.append(_version_file_from_entry(new_version, f))
         for t in tombstones:
             file_rows.append(
-                VersionFile(
-                    version=new_version,
-                    path=t["path"],
-                    content="",
-                    file_type="text",
-                    size_bytes=0,
-                    is_deleted=True,
-                )
+                _version_file_from_entry(new_version, {"path": t["path"]}, is_deleted=True)
             )
         if file_rows:
             VersionFile.objects.bulk_create(file_rows)
@@ -1113,13 +1259,7 @@ def get_version_file(request, slug: str, version_number: int, path: str):
     if path not in files:
         raise HttpError(404, "File not found")
     f = files[path]
-    return {
-        "id": str(f.id),
-        "path": f.path,
-        "file_type": f.file_type,
-        "size_bytes": f.size_bytes,
-        "content": f.content,
-    }
+    return _file_detail(f)
 
 
 @router.get(
@@ -1379,7 +1519,7 @@ def export_process(request, slug: str):
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(f"{skill_name}/SKILL.md", skill_md)
         for path, f in support_files.items():
-            zf.writestr(f"{skill_name}/{path}", f.content)
+            zf.writestr(f"{skill_name}/{path}", file_bytes(f))
 
         metadata = _normalize_metadata(version.koinoflow_metadata)
         if not _is_metadata_empty(metadata):
@@ -1446,13 +1586,12 @@ def import_skill(request, slug: str, file: UploadedFile = File(...)):
     process = _get_process(request, slug)
     check_process_write(request, process)
 
-    max_import_size = 2 * 1024 * 1024  # 2 MB
-    if file.size and file.size > max_import_size:
-        raise HttpError(413, "File too large (max 2 MB)")
+    if file.size and file.size > MAX_SKILL_IMPORT_BYTES:
+        raise HttpError(413, f"Archive is too large (max {_format_bytes(MAX_SKILL_IMPORT_BYTES)})")
 
     raw = file.read()
-    if len(raw) > max_import_size:
-        raise HttpError(413, "File too large (max 2 MB)")
+    if len(raw) > MAX_SKILL_IMPORT_BYTES:
+        raise HttpError(413, f"Archive is too large (max {_format_bytes(MAX_SKILL_IMPORT_BYTES)})")
 
     skill_text = None
     support_file_entries: list[dict] = []
@@ -1482,17 +1621,8 @@ def import_skill(request, slug: str, file: UploadedFile = File(...)):
                         rel_path = parts[1] if len(parts) == 2 else name
                         if rel_path:
                             rel_path = _normalize_support_file_path(rel_path)
-                            try:
-                                content = zf.read(name).decode("utf-8")
-                            except UnicodeDecodeError:
-                                continue
-                            support_file_entries.append(
-                                {
-                                    "path": rel_path,
-                                    "content": content,
-                                    "file_type": detect_file_type(rel_path),
-                                }
-                            )
+                            data = zf.read(name)
+                            support_file_entries.append(_file_entry(path=rel_path, data=data))
         except zipfile.BadZipFile:
             raise HttpError(400, "Invalid zip archive")
 
@@ -1532,27 +1662,10 @@ def import_skill(request, slug: str, file: UploadedFile = File(...)):
             creates, tombstones = compute_file_delta(process.id, prev_num, support_file_entries)
             file_rows = []
             for f in creates:
-                content = f.get("content", "")
-                file_rows.append(
-                    VersionFile(
-                        version=version,
-                        path=f["path"],
-                        content=content,
-                        file_type=f.get("file_type", "text"),
-                        size_bytes=len(content.encode("utf-8")),
-                        is_deleted=False,
-                    )
-                )
+                file_rows.append(_version_file_from_entry(version, f))
             for t in tombstones:
                 file_rows.append(
-                    VersionFile(
-                        version=version,
-                        path=t["path"],
-                        content="",
-                        file_type="text",
-                        size_bytes=0,
-                        is_deleted=True,
-                    )
+                    _version_file_from_entry(version, {"path": t["path"]}, is_deleted=True)
                 )
             if file_rows:
                 VersionFile.objects.bulk_create(file_rows)
