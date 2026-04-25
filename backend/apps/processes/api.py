@@ -17,6 +17,7 @@ from django.http import HttpResponse
 from django.utils import timezone
 from ninja import Field, File, Router, Schema, Status, UploadedFile
 from ninja.errors import HttpError
+from pgvector.django import CosineDistance
 
 from apps.accounts.auth import api_or_session
 from apps.accounts.permissions import (
@@ -34,6 +35,14 @@ from apps.common.throttles import (
 from apps.orgs.api import UserBriefOut, _user_brief
 from apps.orgs.enums import EntityType, RoleChoices
 from apps.orgs.models import Membership, get_effective_settings
+from apps.processes.discovery import (
+    VertexEmbeddingClient,
+    get_embedding_config,
+    queue_process_discovery_embedding,
+)
+from apps.processes.discovery import (
+    normalize_metadata as normalize_discovery_metadata,
+)
 from apps.processes.enums import StatusChoices, VisibilityChoices
 from apps.processes.files import (
     compute_file_delta,
@@ -251,6 +260,33 @@ class ProcessDetailOut(Schema):
 class ProcessListOut(Schema):
     items: list[ProcessOut]
     count: int
+
+
+class ProcessDiscoveryResultOut(Schema):
+    id: str
+    title: str
+    slug: str
+    description: str
+    department_slug: str
+    department_name: str
+    team_slug: str
+    team_name: str
+    current_version_number: int | None
+    risk_level: RiskLevel | None
+    retrieval_keywords: list[str]
+    requires_human_approval: bool
+    score: float
+    vector_score: float | None
+    lexical_score: float
+    match_reasons: list[str]
+    snippet: str
+    indexed: bool
+
+
+class ProcessDiscoveryOut(Schema):
+    items: list[ProcessDiscoveryResultOut]
+    count: int
+    embedding_status: str
 
 
 class VersionListOut(Schema):
@@ -728,24 +764,11 @@ def _get_process(request, slug: str, *, allow_draft=True):
     return process
 
 
-# ── Process Endpoints ────────────────────────────────────────────────────
-
-
-@router.get("/processes", response=ProcessListOut, auth=api_or_session, throttle=[ReadThrottle()])
-def list_processes(
-    request,
-    department: str | None = None,
-    team: str | None = None,
-    status: str | None = None,
-    search: str | None = None,
-    limit: int = 20,
-    offset: int = 0,
-):
+def _base_process_queryset(request):
     workspace = request.workspace
     if not workspace:
         raise HttpError(403, "No workspace context")
 
-    limit = min(limit, 100)
     qs = (
         Process.objects.filter(department__team__workspace=workspace)
         .select_related("department__team", "owner", "current_version")
@@ -760,7 +783,16 @@ def list_processes(
     elif is_oauth:
         qs = qs.filter(status=StatusChoices.PUBLISHED)
         qs = apply_oauth_connection_scope(request, qs)
+    return qs
 
+
+def _apply_process_filters(
+    qs,
+    *,
+    department: str | None = None,
+    team: str | None = None,
+    status: str | None = None,
+):
     if department:
         from apps.orgs.models import CoreSlug
         from apps.orgs.models import Department as Dept
@@ -788,6 +820,96 @@ def list_processes(
         )
     if status:
         qs = qs.filter(status=status)
+    return qs
+
+
+def _query_tokens(query: str) -> set[str]:
+    return {token for token in re.findall(r"[a-z0-9][a-z0-9_-]+", query.lower()) if len(token) > 1}
+
+
+def _token_hit_ratio(tokens: set[str], text: str) -> float:
+    if not tokens or not text:
+        return 0.0
+    lowered = text.lower()
+    hits = sum(1 for token in tokens if token in lowered)
+    return hits / len(tokens)
+
+
+def _process_snippet(process: Process, tokens: set[str]) -> str:
+    if process.description:
+        ratio = _token_hit_ratio(tokens, process.description)
+        if ratio:
+            return process.description[:280]
+    content = process.current_version.content_md if process.current_version else ""
+    for line in content.splitlines():
+        cleaned = line.strip()
+        if cleaned and _token_hit_ratio(tokens, cleaned):
+            return cleaned[:280]
+    return (process.description or content.strip())[:280]
+
+
+def _lexical_discovery_score(process: Process, query: str) -> tuple[float, list[str], str]:
+    tokens = _query_tokens(query)
+    version = process.current_version
+    metadata = normalize_discovery_metadata(version.koinoflow_metadata if version else {})
+
+    title_score = _token_hit_ratio(tokens, process.title)
+    slug_score = _token_hit_ratio(tokens, process.slug)
+    description_score = _token_hit_ratio(tokens, process.description)
+    keyword_score = _token_hit_ratio(tokens, " ".join(metadata["retrieval_keywords"]))
+    audience_score = _token_hit_ratio(tokens, " ".join(metadata["audience"]))
+    prerequisite_score = _token_hit_ratio(tokens, " ".join(metadata["prerequisites"]))
+    content_score = _token_hit_ratio(tokens, version.content_md if version else "")
+
+    score = (
+        0.25 * title_score
+        + 0.15 * slug_score
+        + 0.15 * description_score
+        + 0.25 * keyword_score
+        + 0.05 * audience_score
+        + 0.05 * prerequisite_score
+        + 0.10 * content_score
+    )
+    reasons = []
+    if title_score:
+        reasons.append("title matched query terms")
+    if slug_score:
+        reasons.append("slug matched query terms")
+    if description_score:
+        reasons.append("description matched query terms")
+    if keyword_score:
+        reasons.append("retrieval keywords matched query terms")
+    if audience_score:
+        reasons.append("audience matched query terms")
+    if prerequisite_score:
+        reasons.append("prerequisites matched query terms")
+    if content_score:
+        reasons.append("process body matched query terms")
+
+    return min(score, 1.0), reasons, _process_snippet(process, tokens)
+
+
+# ── Process Endpoints ────────────────────────────────────────────────────
+
+
+@router.get("/processes", response=ProcessListOut, auth=api_or_session, throttle=[ReadThrottle()])
+def list_processes(
+    request,
+    department: str | None = None,
+    team: str | None = None,
+    status: str | None = None,
+    search: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+):
+    limit = min(max(limit, 1), 100)
+    offset = max(offset, 0)
+    qs = _apply_process_filters(
+        _base_process_queryset(request),
+        department=department,
+        team=team,
+        status=status,
+    )
     if search:
         qs = qs.filter(Q(title__icontains=search) | Q(description__icontains=search))
 
@@ -798,6 +920,123 @@ def list_processes(
     shared_cache = {}
     items = [_process_out(p, audit_cache, shared_cache) for p in page]
     return {"items": items, "count": count}
+
+
+@router.get(
+    "/processes/discover",
+    response=ProcessDiscoveryOut,
+    auth=api_or_session,
+    throttle=[ReadThrottle()],
+)
+def discover_processes(
+    request,
+    query: str,
+    department: str | None = None,
+    team: str | None = None,
+    limit: int = 10,
+):
+    query = query.strip()
+    if not query:
+        raise HttpError(400, "Query is required")
+
+    limit = min(max(limit, 1), 25)
+    qs = _apply_process_filters(
+        _base_process_queryset(request),
+        department=department,
+        team=team,
+    ).filter(current_version__isnull=False)
+    qs = qs.select_related(
+        "department__team",
+        "current_version__discovery_embedding",
+    )
+
+    config = None
+    query_vector = None
+    embedding_status = "unavailable"
+    try:
+        config = get_embedding_config()
+        query_vector = VertexEmbeddingClient(config).embed_query(query)
+        embedding_status = "ready"
+    except Exception as exc:
+        logger.warning("Process discovery embedding unavailable: %s", exc)
+
+    vector_scores = {}
+    candidates = {}
+    if query_vector is not None and config is not None:
+        vector_rows = (
+            qs.filter(
+                current_version__discovery_embedding__embedding_model=config.model,
+                current_version__discovery_embedding__embedding_dimensions=config.dimensions,
+            )
+            .annotate(
+                vector_distance=CosineDistance(
+                    "current_version__discovery_embedding__embedding",
+                    query_vector,
+                )
+            )
+            .order_by("vector_distance")[: max(limit * 5, 50)]
+        )
+        for process in vector_rows:
+            distance = float(process.vector_distance)
+            score = max(0.0, min(1.0, 1.0 - distance))
+            vector_scores[process.id] = score
+            candidates[process.id] = process
+
+    lexical_pool = qs[:500]
+    for process in lexical_pool:
+        candidates[process.id] = process
+
+    results = []
+    for process in candidates.values():
+        lexical_score, reasons, snippet = _lexical_discovery_score(process, query)
+        vector_score = vector_scores.get(process.id)
+        if vector_score is not None:
+            combined_score = (0.70 * vector_score) + (0.30 * lexical_score)
+            reasons = [f"semantic similarity {vector_score:.2f}", *reasons]
+        else:
+            combined_score = lexical_score
+
+        if combined_score <= 0:
+            continue
+
+        version = process.current_version
+        metadata = normalize_discovery_metadata(version.koinoflow_metadata if version else {})
+        indexed = False
+        if version is not None:
+            try:
+                indexed = bool(version.discovery_embedding)
+            except ProcessVersion.discovery_embedding.RelatedObjectDoesNotExist:
+                indexed = False
+        results.append(
+            {
+                "id": str(process.id),
+                "title": process.title,
+                "slug": process.slug,
+                "description": process.description,
+                "department_slug": _get_slug(EntityType.DEPARTMENT, process.department_id),
+                "department_name": process.department.name,
+                "team_slug": _get_slug(EntityType.TEAM, process.department.team_id),
+                "team_name": process.department.team.name,
+                "current_version_number": version.version_number if version else None,
+                "risk_level": metadata["risk_level"],
+                "retrieval_keywords": metadata["retrieval_keywords"],
+                "requires_human_approval": metadata["requires_human_approval"],
+                "score": round(combined_score, 4),
+                "vector_score": round(vector_score, 4) if vector_score is not None else None,
+                "lexical_score": round(lexical_score, 4),
+                "match_reasons": reasons[:5],
+                "snippet": snippet,
+                "indexed": indexed,
+            }
+        )
+
+    results.sort(key=lambda item: item["score"], reverse=True)
+    page = results[:limit]
+    return {
+        "items": page,
+        "count": len(results),
+        "embedding_status": embedding_status,
+    }
 
 
 @router.post(
@@ -936,6 +1175,9 @@ def update_process(request, slug: str, payload: UpdateProcessIn):
 
     if payload.shared_with_ids is not None:
         _set_shared_with(process, payload.shared_with_ids, workspace)
+
+    if process.status == StatusChoices.PUBLISHED and process.current_version_id:
+        queue_process_discovery_embedding(str(process.current_version_id))
 
     process = Process.objects.select_related(
         "department__team",
@@ -1414,6 +1656,7 @@ def publish_process(request, slug: str):
     process.status = StatusChoices.PUBLISHED
     process.last_reviewed_at = timezone.now()
     process.save(update_fields=["current_version", "status", "last_reviewed_at", "updated_at"])
+    queue_process_discovery_embedding(str(latest.id), force=True)
 
     process = Process.objects.select_related(
         "department__team",

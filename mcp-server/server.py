@@ -145,10 +145,14 @@ mcp = FastMCP(
     "Koinoflow",
     instructions=(
         "Koinoflow exposes the organization's approved, versioned operational "
-        "procedures (processes). Use list_processes to discover processes that "
-        "apply to an organization-specific task, and read_process to load the "
-        "full approved instructions for a known slug. Each process may include "
-        "a Koinoflow Context block summarizing risk level, approval "
+        "procedures (processes). Tool choice rule: when the user describes a "
+        "task, goal, incident, question, or desired action and no exact process "
+        "slug is known, call discover_processes first. After selecting the best "
+        "candidate, call read_process before giving organization-specific "
+        "guidance or executing steps. Do not use list_processes for task "
+        "matching; use it only when the user explicitly asks to browse, list, "
+        "page through, audit, or debug available processes. Each process may "
+        "include a Koinoflow Context block summarizing risk level, approval "
         "requirements, prerequisites, audience, and retrieval keywords. "
         "propose_process_update and apply_process_update are available for "
         "suggesting and publishing new process versions."
@@ -250,6 +254,44 @@ def _build_koinoflow_context_block(metadata: dict | None) -> str:
         lines.append(f"> - Audience: {', '.join(audience)}")
     if keywords:
         lines.append(f"> - Retrieval keywords: {', '.join(keywords)}")
+    return "\n".join(lines)
+
+
+def _format_discovery_results(data: dict, query: str) -> str:
+    items = data.get("items", [])
+    if not items:
+        status = data.get("embedding_status", "unavailable")
+        return f"No process matches found for `{query}`. (embedding status: {status})"
+
+    status = data.get("embedding_status", "unavailable")
+    lines = [
+        f"Top {len(items)} process matches for `{query}` (embedding status: {status}):",
+        "",
+    ]
+    for idx, item in enumerate(items, start=1):
+        line = f"{idx}. **{item['title']}** (`{item['slug']}`) [score: {item.get('score', 0):.2f}]"
+        org = " / ".join(
+            part for part in (item.get("team_name"), item.get("department_name")) if part
+        )
+        if org:
+            line += f" — {org}"
+        if item.get("current_version_number"):
+            line += f" [v{item['current_version_number']}]"
+        if item.get("risk_level"):
+            line += f" [risk: {item['risk_level']}]"
+        if item.get("requires_human_approval"):
+            line += " [needs approval]"
+        if not item.get("indexed", False):
+            line += " [not semantically indexed]"
+        lines.append(line)
+        reasons = item.get("match_reasons") or []
+        if reasons:
+            lines.append(f"   Reasons: {', '.join(reasons)}")
+        snippet = item.get("snippet")
+        if snippet:
+            lines.append(f"   Snippet: {snippet}")
+    lines.append("")
+    lines.append("Call read_process with the best matching slug before executing the process.")
     return "\n".join(lines)
 
 
@@ -385,9 +427,11 @@ async def read_process(
     """Load the full approved Koinoflow process for a specific slug.
 
     Use this when a matching process slug is known (directly from the user or
-    from list_processes). Returns the Markdown process with YAML frontmatter
-    and, when present, a Koinoflow Context block summarizing the process's
-    risk level, approval requirements, prerequisites, audience, and retrieval
+    from discover_processes/list_processes). For task-based user requests,
+    discover_processes should usually be called before this tool unless the
+    slug is already known. Returns the Markdown process with YAML frontmatter
+    and, when present, a Koinoflow Context block summarizing the process's risk
+    level, approval requirements, prerequisites, audience, and retrieval
     keywords. A listing of support files is appended by default.
 
     Args:
@@ -500,6 +544,43 @@ async def read_process_file(
 
 
 @mcp.tool(
+    annotations=ToolAnnotations(title="Discover processes", readOnlyHint=True),
+)
+async def discover_processes(
+    query: str,
+    department: str | None = None,
+    team: str | None = None,
+    limit: int = 10,
+) -> str:
+    """Find the most relevant Koinoflow processes for a natural-language task.
+
+    Default discovery tool for user intent. Use this before read_process when
+    the user describes what they want to do and the exact process slug is
+    unknown. Results are ranked with semantic embeddings plus keyword and
+    metadata matches. Do not use list_processes first for task matching.
+
+    Args:
+        query: Natural-language task or question to match against processes
+        department: Optional department slug to narrow discovery
+        team: Optional team slug to narrow discovery
+        limit: Max ranked candidates to return (1–25, default 10)
+    """
+    client = _get_client()
+    if not client:
+        return _NO_AUTH_MSG
+    try:
+        data = await client.discover_processes(
+            query=query,
+            department=department,
+            team=team,
+            limit=min(max(limit, 1), 25),
+        )
+    except KoinoflowAPIError as e:
+        return f"Error discovering processes: {e}"
+    return _format_discovery_results(data, query)
+
+
+@mcp.tool(
     annotations=ToolAnnotations(title="List processes", readOnlyHint=True),
 )
 async def list_processes(
@@ -511,7 +592,9 @@ async def list_processes(
 ) -> str:
     """List the Koinoflow processes available in the organization.
 
-    Use this when an organization-specific process slug is not already known.
+    Use this only to browse, enumerate, page through, audit, or debug available
+    processes. Do not use this for natural-language task matching; call
+    discover_processes instead, then read_process for the selected slug.
     Returns each process's title, slug, description, current version number,
     and — when set — risk level, approval requirement, and retrieval
     keywords. Results can be filtered by department and/or team slug. The

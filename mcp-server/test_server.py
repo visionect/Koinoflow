@@ -14,6 +14,7 @@ from server import (  # noqa: E402
     _mcp_client_type,
     _token_info_var,
     apply_process_update,
+    discover_processes,
     list_processes,
     propose_process_update,
     read_process,
@@ -125,6 +126,31 @@ PROCESS_LIST_WITH_METADATA = {
         },
     ],
     "count": 1,
+}
+
+PROCESS_DISCOVERY = {
+    "items": [
+        {
+            "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "title": "Deploy to Production",
+            "slug": "deploy-to-production",
+            "description": "Ship code",
+            "current_version_number": 3,
+            "department_name": "Engineering",
+            "team_name": "Platform",
+            "risk_level": "high",
+            "requires_human_approval": True,
+            "retrieval_keywords": ["deploy", "release"],
+            "score": 0.9234,
+            "vector_score": 0.95,
+            "lexical_score": 0.86,
+            "match_reasons": ["semantic similarity 0.95", "retrieval keywords matched query terms"],
+            "snippet": "Release services safely.",
+            "indexed": True,
+        }
+    ],
+    "count": 1,
+    "embedding_status": "ready",
 }
 
 
@@ -244,6 +270,28 @@ async def test_list_processes_formats_output():
     assert "[v3]" in result
     assert "**Onboarding Checklist**" in result
     assert "`onboarding-checklist`" in result
+
+
+@respx.mock
+async def test_discover_processes_formats_ranked_output():
+    _set_token_scope()
+    route = respx.get("http://testserver/api/v1/processes/discover").mock(
+        return_value=Response(200, json=PROCESS_DISCOVERY)
+    )
+
+    result = await discover_processes(query="ship production", limit=5)
+
+    assert route.called
+    assert route.calls[0].request.url.params["query"] == "ship production"
+    assert route.calls[0].request.url.params["limit"] == "5"
+    assert "Top 1 process matches" in result
+    assert "**Deploy to Production**" in result
+    assert "`deploy-to-production`" in result
+    assert "[score: 0.92]" in result
+    assert "[risk: high]" in result
+    assert "[needs approval]" in result
+    assert "semantic similarity 0.95" in result
+    assert "Call read_process" in result
 
 
 @respx.mock

@@ -12,7 +12,7 @@ from apps.orgs.models import ApiKey, CoreSettings
 from apps.orgs.tests.factories import DepartmentFactory, TeamFactory
 from apps.processes.enums import StatusChoices, VisibilityChoices
 from apps.processes.files import resolve_files
-from apps.processes.models import Process, ProcessVersion, VersionFile
+from apps.processes.models import Process, ProcessDiscoveryEmbedding, ProcessVersion, VersionFile
 from apps.processes.tests.factories import ProcessFactory, ProcessVersionFactory, VersionFileFactory
 
 
@@ -509,6 +509,162 @@ class TestListProcesses:
         data = resp.json()
         assert data["count"] == 1
         assert data["items"][0]["slug"] == "published"
+
+
+@pytest.mark.django_db
+class TestDiscoverProcesses:
+    def _published_process(self, dept, *, slug, title, content, metadata=None):
+        process = ProcessFactory(
+            department=dept,
+            slug=slug,
+            title=title,
+            status=StatusChoices.PUBLISHED,
+        )
+        version = ProcessVersionFactory(
+            process=process,
+            version_number=1,
+            content_md=content,
+            koinoflow_metadata=metadata or {},
+        )
+        process.current_version = version
+        process.save(update_fields=["current_version"])
+        return process, version
+
+    def test_discover_processes_uses_metadata_when_embeddings_unavailable(
+        self, auth_client, admin_membership, monkeypatch
+    ):
+        ws = admin_membership.workspace
+        team = TeamFactory(workspace=ws, slug="eng")
+        dept = DepartmentFactory(team=team, slug="platform")
+        self._published_process(
+            dept,
+            slug="deploy-prod",
+            title="Deploy Production",
+            content="# Deploy\n\nShip services safely.",
+            metadata={"retrieval_keywords": ["ship", "release", "production"]},
+        )
+        self._published_process(
+            dept,
+            slug="onboard",
+            title="Onboard Employee",
+            content="# Onboard\n\nCreate accounts.",
+            metadata={"retrieval_keywords": ["hire", "account"]},
+        )
+
+        class FailingEmbeddingClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def embed_query(self, query):
+                raise RuntimeError("vertex unavailable")
+
+        monkeypatch.setattr("apps.processes.api.VertexEmbeddingClient", FailingEmbeddingClient)
+
+        resp = auth_client.get("/api/v1/processes/discover?query=ship%20production")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["embedding_status"] == "unavailable"
+        assert data["items"][0]["slug"] == "deploy-prod"
+        assert "retrieval keywords matched query terms" in data["items"][0]["match_reasons"]
+
+    def test_discover_processes_ranks_semantic_matches(
+        self, auth_client, admin_membership, monkeypatch
+    ):
+        ws = admin_membership.workspace
+        team = TeamFactory(workspace=ws, slug="eng")
+        dept = DepartmentFactory(team=team, slug="platform")
+        deploy, deploy_version = self._published_process(
+            dept,
+            slug="deploy-prod",
+            title="Deploy Production",
+            content="# Deploy\n\nRelease services.",
+        )
+        _, onboard_version = self._published_process(
+            dept,
+            slug="onboard",
+            title="Onboard Employee",
+            content="# Onboard\n\nCreate accounts.",
+        )
+        vector_a = [1.0] + [0.0] * 767
+        vector_b = [0.8, 0.6] + [0.0] * 766
+        ProcessDiscoveryEmbedding.objects.create(
+            version=deploy_version,
+            embedding=vector_a,
+            embedding_model="gemini-embedding-2",
+            embedding_dimensions=768,
+            content_hash="a" * 64,
+            indexed_text="deploy production",
+            indexed_at=timezone.now(),
+        )
+        ProcessDiscoveryEmbedding.objects.create(
+            version=onboard_version,
+            embedding=vector_b,
+            embedding_model="gemini-embedding-2",
+            embedding_dimensions=768,
+            content_hash="b" * 64,
+            indexed_text="onboarding",
+            indexed_at=timezone.now(),
+        )
+
+        class StaticEmbeddingClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def embed_query(self, query):
+                return vector_a
+
+        monkeypatch.setattr("apps.processes.api.VertexEmbeddingClient", StaticEmbeddingClient)
+
+        resp = auth_client.get("/api/v1/processes/discover?query=release")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["embedding_status"] == "ready"
+        assert data["items"][0]["slug"] == deploy.slug
+        assert data["items"][0]["indexed"] is True
+        assert data["items"][0]["vector_score"] > data["items"][1]["vector_score"]
+
+    def test_discover_processes_api_key_hides_drafts(self, admin_membership, monkeypatch):
+        ws = admin_membership.workspace
+        team = TeamFactory(workspace=ws, slug="eng")
+        dept = DepartmentFactory(team=team, slug="platform")
+        draft = ProcessFactory(department=dept, slug="draft", status=StatusChoices.DRAFT)
+        draft_version = ProcessVersionFactory(
+            process=draft,
+            version_number=1,
+            content_md="# Draft secret deploy process",
+        )
+        draft.current_version = draft_version
+        draft.save(update_fields=["current_version"])
+        self._published_process(
+            dept,
+            slug="published",
+            title="Published Deploy",
+            content="# Published deploy process",
+        )
+
+        class FailingEmbeddingClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def embed_query(self, query):
+                raise RuntimeError("vertex unavailable")
+
+        monkeypatch.setattr("apps.processes.api.VertexEmbeddingClient", FailingEmbeddingClient)
+        raw_key, key_hash, key_prefix = ApiKey.generate()
+        ApiKey.objects.create(
+            workspace=ws,
+            key_hash=key_hash,
+            key_prefix=key_prefix,
+            label="test",
+        )
+        client = Client()
+        resp = client.get(
+            "/api/v1/processes/discover?query=deploy",
+            HTTP_AUTHORIZATION=f"Bearer {raw_key}",
+        )
+        assert resp.status_code == 200
+        slugs = [item["slug"] for item in resp.json()["items"]]
+        assert slugs == ["published"]
 
 
 @pytest.mark.django_db

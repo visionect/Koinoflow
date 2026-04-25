@@ -1,7 +1,11 @@
 import { createHash, createHmac } from "node:crypto";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { KoinoflowAPIClient, KoinoflowMetadata } from "./api-client.js";
+import type {
+  KoinoflowAPIClient,
+  KoinoflowMetadata,
+  ProcessDiscoveryResponse,
+} from "./api-client.js";
 
 const approvalTokenSecret =
   process.env.KOINOFLOW_MCP_APPROVAL_TOKEN_SECRET ??
@@ -162,6 +166,37 @@ function buildKoinoflowContextBlock(metadata: KoinoflowMetadata): string {
   if (keywords.length > 0) {
     lines.push(`> - Retrieval keywords: ${keywords.join(", ")}`);
   }
+  return lines.join("\n");
+}
+
+function formatDiscoveryResults(data: ProcessDiscoveryResponse, query: string): string {
+  if (data.items.length === 0) {
+    return `No process matches found for \`${query}\`. (embedding status: ${data.embedding_status})`;
+  }
+
+  const lines = [
+    `Top ${data.items.length} process matches for \`${query}\` (embedding status: ${data.embedding_status}):`,
+    "",
+  ];
+  data.items.forEach((item, index) => {
+    let line = `${index + 1}. **${item.title}** (\`${item.slug}\`) [score: ${item.score.toFixed(2)}]`;
+    const org = [item.team_name, item.department_name].filter(Boolean).join(" / ");
+    if (org) line += ` — ${org}`;
+    if (item.current_version_number)
+      line += ` [v${item.current_version_number}]`;
+    if (item.risk_level) line += ` [risk: ${item.risk_level}]`;
+    if (item.requires_human_approval) line += " [needs approval]";
+    if (!item.indexed) line += " [not semantically indexed]";
+    lines.push(line);
+    if (item.match_reasons.length > 0) {
+      lines.push(`   Reasons: ${item.match_reasons.join(", ")}`);
+    }
+    if (item.snippet) {
+      lines.push(`   Snippet: ${item.snippet}`);
+    }
+  });
+  lines.push("");
+  lines.push("Call read_process with the best matching slug before executing the process.");
   return lines.join("\n");
 }
 
@@ -333,7 +368,7 @@ export function registerTools(
 ): void {
   server.tool(
     "read_process",
-    "Load the full approved Koinoflow instructions for a specific process. Use after list_processes, or immediately if the exact slug is already known, before giving organization-specific guidance.",
+    "Load the full approved Koinoflow instructions for a specific process. Use after discover_processes for task-based requests, after list_processes for browsing results, or immediately if the exact slug is already known.",
     {
       slug: z
         .string()
@@ -475,8 +510,54 @@ export function registerTools(
   );
 
   server.tool(
+    "discover_processes",
+    "Default discovery tool for user intent. Use this first when the user describes a task, goal, incident, question, or desired action and the exact process slug is unknown. Then call read_process for the best candidate. Do not call list_processes first for task matching.",
+    {
+      query: z
+        .string()
+        .min(1)
+        .describe("Natural-language task or question to match against processes"),
+      department: z
+        .string()
+        .optional()
+        .describe("Optional department slug to narrow discovery"),
+      team: z
+        .string()
+        .optional()
+        .describe("Optional team slug to narrow discovery"),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(25)
+        .optional()
+        .describe("Max ranked candidates to return (1–25, default 10)"),
+    },
+    async ({ query, department, team, limit = 10 }) => {
+      try {
+        const data = await client.discoverProcesses(
+          query,
+          department,
+          team,
+          limit,
+        );
+        return {
+          content: [
+            { type: "text" as const, text: formatDiscoveryResults(data, query) },
+          ],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${e}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
     "list_processes",
-    "Discover the relevant Koinoflow process before answering organization-specific questions. Use this first when the exact process slug is unknown, then call read_process for the best match.",
+    "Browse, enumerate, page through, audit, or debug available Koinoflow processes. Do not use this for natural-language task matching; use discover_processes first unless the user explicitly asks to list or browse processes.",
     {
       department: z
         .string()
