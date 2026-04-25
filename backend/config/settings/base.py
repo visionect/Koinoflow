@@ -274,6 +274,13 @@ CAPTURE_SCORING_MODEL = config("CAPTURE_SCORING_MODEL", default="gemini-3-flash-
 CAPTURE_EXTRACTION_MODEL = config("CAPTURE_EXTRACTION_MODEL", default="gemini-3-flash-preview")
 # Model used for AI-powered process generation from unstructured documentation
 PROCESS_GENERATION_MODEL = config("PROCESS_GENERATION_MODEL", default="gemini-3-flash-preview")
+# Model used for semantic process discovery embeddings
+PROCESS_DISCOVERY_EMBEDDING_MODEL = config(
+    "PROCESS_DISCOVERY_EMBEDDING_MODEL", default="gemini-embedding-2"
+)
+PROCESS_DISCOVERY_EMBEDDING_DIMENSIONS = config(
+    "PROCESS_DISCOVERY_EMBEDDING_DIMENSIONS", default=768, cast=int
+)
 # Vertex AI project and location (shared with other Vertex AI integrations)
 VERTEX_PROJECT_ID = config("VERTEX_PROJECT_ID", default=config("GCP_PROJECT_ID", default=""))
 VERTEX_LOCATION = config("VERTEX_LOCATION", default="global")

@@ -1,6 +1,7 @@
 from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 from django.db.models import Q
+from pgvector.django import HnswIndex, VectorField
 
 from apps.common.models import BaseModel
 from apps.processes.enums import StatusChoices, VisibilityChoices
@@ -130,6 +131,40 @@ class ProcessVersion(BaseModel):
 
     def __str__(self):
         return f"{self.process.title} v{self.version_number}"
+
+
+class ProcessDiscoveryEmbedding(BaseModel):
+    version = models.OneToOneField(
+        ProcessVersion,
+        on_delete=models.CASCADE,
+        related_name="discovery_embedding",
+    )
+    embedding = VectorField(dimensions=768)
+    embedding_model = models.CharField(max_length=100)
+    embedding_dimensions = models.PositiveSmallIntegerField(default=768)
+    content_hash = models.CharField(max_length=64)
+    indexed_text = models.TextField()
+    indexed_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "process_discovery_embedding"
+        indexes = [
+            models.Index(
+                fields=["embedding_model", "embedding_dimensions"],
+                name="idx_proc_disc_model_dims",
+            ),
+            models.Index(fields=["content_hash"], name="idx_proc_disc_hash"),
+            HnswIndex(
+                name="idx_proc_disc_hnsw",
+                fields=["embedding"],
+                m=16,
+                ef_construction=64,
+                opclasses=["vector_cosine_ops"],
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.version} discovery embedding"
 
 
 class FileTypeChoices(models.TextChoices):

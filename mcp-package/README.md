@@ -91,14 +91,32 @@ Read a specific process by its slug. Returns the full Markdown content with YAML
 - `version` (number, optional) — Specific version number; defaults to latest published
 - `include_files` (boolean, optional, default `true`) — Append a support-file listing; set to `false` to return only the main markdown
 
+### `discover_processes`
+
+Find the most relevant process for a natural-language task. Use this when the
+slug is unknown; it returns ranked candidates with scores, match reasons,
+snippets, risk/approval metadata, and semantic indexing status. Call
+`read_process` with the best matching slug before following the process.
+
+**Parameters:**
+
+- `query` (string, required) — Natural-language task or question to match
+- `department` (string, optional) — Filter by department slug
+- `team` (string, optional) — Filter by team slug
+- `limit` (number, optional, default `10`) — Ranked candidates to return, capped at `25`
+
 ### `list_processes`
 
-List available processes in the workspace. Returns titles, slugs, and descriptions.
+Browse or page through available processes in the workspace. Prefer
+`discover_processes` for task-based discovery.
 
 **Parameters:**
 
 - `department` (string, optional) — Filter by department slug
 - `team` (string, optional) — Filter by team slug
+- `search` (string, optional) — Keyword search across title and description
+- `limit` (number, optional, default `100`) — Page size, capped at `100`
+- `offset` (number, optional, default `0`) — Pagination offset
 
 ## License
 

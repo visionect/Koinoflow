@@ -62,6 +62,31 @@ class KoinoflowAPIClient:
                 raise KoinoflowAPIError(response.status_code, response.text)
             return response.json()
 
+    async def discover_processes(
+        self,
+        query: str,
+        department: str | None = None,
+        team: str | None = None,
+        limit: int = 10,
+    ) -> dict:
+        async with httpx.AsyncClient() as client:
+            params: dict[str, str | int] = {
+                "query": query,
+                "limit": min(max(limit, 1), 25),
+            }
+            if department:
+                params["department"] = department
+            if team:
+                params["team"] = team
+            response = await client.get(
+                f"{self.base_url}/processes/discover",
+                headers=self._headers(),
+                params=params,
+            )
+            if not response.is_success:
+                raise KoinoflowAPIError(response.status_code, response.text)
+            return response.json()
+
     async def get_effective_settings(self) -> dict:
         async with httpx.AsyncClient() as client:
             response = await client.get(

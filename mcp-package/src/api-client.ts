@@ -58,6 +58,31 @@ export interface ProcessListResponse {
   count: number;
 }
 
+export interface ProcessDiscoveryItem {
+  id: string;
+  title: string;
+  slug: string;
+  description: string;
+  department_name: string;
+  team_name: string;
+  current_version_number: number | null;
+  risk_level?: RiskLevel | null;
+  retrieval_keywords?: string[];
+  requires_human_approval?: boolean;
+  score: number;
+  vector_score: number | null;
+  lexical_score: number;
+  match_reasons: string[];
+  snippet: string;
+  indexed: boolean;
+}
+
+export interface ProcessDiscoveryResponse {
+  items: ProcessDiscoveryItem[];
+  count: number;
+  embedding_status: string;
+}
+
 export class KoinoflowAPIClient {
   private baseUrl: string;
   private apiKey: string;
@@ -126,6 +151,21 @@ export class KoinoflowAPIClient {
     if (team) params.team = team;
     if (search) params.search = search;
     return this.request<ProcessListResponse>("/processes", params);
+  }
+
+  async discoverProcesses(
+    query: string,
+    department?: string,
+    team?: string,
+    limit: number = 10,
+  ): Promise<ProcessDiscoveryResponse> {
+    const params: Record<string, string> = {
+      query,
+      limit: String(Math.min(Math.max(limit, 1), 25)),
+    };
+    if (department) params.department = department;
+    if (team) params.team = team;
+    return this.request<ProcessDiscoveryResponse>("/processes/discover", params);
   }
 
   async logUsage(
