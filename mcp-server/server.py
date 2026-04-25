@@ -428,7 +428,8 @@ async def read_process(
         lines = [f"\n\n---\n## Support Files ({len(files)} files)"]
         for f in files:
             size_kb = round(f.get("size_bytes", 0) / 1024, 1)
-            lines.append(f"- {f['path']} ({f.get('file_type', 'text')}, {size_kb} KB)")
+            mime = f.get("mime_type") or f.get("file_type", "text")
+            lines.append(f"- {f['path']} ({mime}, {size_kb} KB)")
         result += "\n".join(lines)
 
     return result
@@ -474,12 +475,28 @@ async def read_process_file(
     except KoinoflowAPIError as e:
         return f"Error fetching file: {e}"
 
-    content = file_data.get("content", "")
+    content = file_data.get("content")
+    content_base64 = file_data.get("content_base64")
     file_type = file_data.get("file_type", "text")
+    mime_type = file_data.get("mime_type", "text/plain")
+    encoding = file_data.get("encoding", "utf-8")
     size_bytes = file_data.get("size_bytes", 0)
 
-    header = f"# {file_path} ({file_type}, {size_bytes} bytes)\n\n"
-    return header + content
+    if isinstance(content, str):
+        header = f"# {file_path} ({file_type}, {mime_type}, {size_bytes} bytes)\n\n"
+        return header + content
+
+    return json.dumps(
+        {
+            "path": file_path,
+            "file_type": file_type,
+            "mime_type": mime_type,
+            "encoding": encoding,
+            "size_bytes": size_bytes,
+            "content_base64": content_base64,
+        },
+        indent=2,
+    )
 
 
 @mcp.tool(

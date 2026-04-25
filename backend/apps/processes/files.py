@@ -2,13 +2,39 @@ import uuid
 
 from apps.processes.models import VersionFile
 
+TEXT_FILE_TYPES = {
+    "python",
+    "markdown",
+    "html",
+    "yaml",
+    "json",
+    "javascript",
+    "typescript",
+    "shell",
+    "text",
+}
+
+
+def file_bytes(file: VersionFile) -> bytes:
+    raw = getattr(file, "content_bytes", b"") or b""
+    if isinstance(raw, memoryview):
+        raw = raw.tobytes()
+    if raw:
+        return bytes(raw)
+    return (getattr(file, "content", "") or "").encode("utf-8")
+
+
+def is_text_file(file: VersionFile) -> bool:
+    return getattr(file, "encoding", "utf-8") == "utf-8" and file.file_type in TEXT_FILE_TYPES
+
 
 def resolve_files(process_id: uuid.UUID, version_number: int) -> dict[str, VersionFile]:
     """Materialize the full file tree at a given version via DISTINCT ON."""
     rows = VersionFile.objects.raw(
         """
         SELECT DISTINCT ON (vf.path)
-            vf.id, vf.path, vf.content, vf.file_type,
+            vf.id, vf.path, vf.content, vf.content_bytes, vf.file_type,
+            vf.mime_type, vf.encoding, vf.sha256,
             vf.size_bytes, vf.is_deleted, vf.version_id,
             vf.created_at, vf.updated_at
         FROM version_file vf
@@ -30,6 +56,8 @@ def resolve_file_list(process_id: uuid.UUID, version_number: int) -> list[dict]:
             "id": str(f.id),
             "path": f.path,
             "file_type": f.file_type,
+            "mime_type": f.mime_type,
+            "encoding": f.encoding,
             "size_bytes": f.size_bytes,
         }
         for f in sorted(files.values(), key=lambda f: f.path)
@@ -51,7 +79,10 @@ def compute_file_delta(
     creates = []
     for path, f in submitted_by_path.items():
         old_file = old.get(path)
-        if old_file is None or old_file.content != f["content"]:
+        new_bytes = f.get("content_bytes")
+        if new_bytes is None:
+            new_bytes = (f.get("content") or "").encode("utf-8")
+        if old_file is None or file_bytes(old_file) != new_bytes:
             creates.append(f)
 
     tombstones = []
@@ -72,8 +103,16 @@ def detect_file_type(filename: str) -> str:
         "htm": "html",
         "yaml": "yaml",
         "yml": "yaml",
+        "json": "json",
         "js": "javascript",
         "ts": "typescript",
         "sh": "shell",
+        "png": "image",
+        "jpg": "image",
+        "jpeg": "image",
+        "gif": "image",
+        "webp": "image",
+        "svg": "image",
+        "pdf": "pdf",
     }
-    return mapping.get(ext, "text")
+    return mapping.get(ext, "binary")

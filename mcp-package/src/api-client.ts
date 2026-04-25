@@ -2,7 +2,14 @@ interface VersionFileOut {
   id: string;
   path: string;
   file_type: string;
+  mime_type?: string;
+  encoding?: string;
   size_bytes: number;
+}
+
+interface VersionFileDetailOut extends VersionFileOut {
+  content: string | null;
+  content_base64: string | null;
 }
 
 export type RiskLevel = "low" | "medium" | "high" | "critical";
@@ -91,6 +98,16 @@ export class KoinoflowAPIClient {
         ? `/processes/${slug}/versions/${version}`
         : `/processes/${slug}`;
     return this.request<ProcessDetail | ProcessVersionOut>(path);
+  }
+
+  async getProcessFile(
+    slug: string,
+    version: number,
+    path: string,
+  ): Promise<VersionFileDetailOut> {
+    return this.request<VersionFileDetailOut>(
+      `/processes/${slug}/versions/${version}/files/${encodeURIComponent(path)}`,
+    );
   }
 
   async listProcesses(

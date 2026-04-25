@@ -88,17 +88,24 @@ export interface VersionFile {
   id: string
   path: string
   file_type: string
+  mime_type: string
+  encoding: string
   size_bytes: number
 }
 
 export interface VersionFileDetail extends VersionFile {
-  content: string
+  content: string | null
+  content_base64: string | null
 }
 
 export interface VersionFileInput {
   path: string
-  content: string
+  content?: string | null
+  content_base64?: string | null
   file_type: string
+  mime_type?: string | null
+  encoding?: string | null
+  size_bytes?: number
 }
 
 export interface FileDiffEntry {

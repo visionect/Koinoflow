@@ -57,6 +57,9 @@ function fileIcon(fileType: string) {
     case "html":
       return <FileCode2Icon className="size-3.5 shrink-0 text-warning" aria-hidden />
     case "markdown":
+    case "yaml":
+    case "json":
+    case "shell":
     case "text":
       return <FileTextIcon className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
     default:
@@ -66,6 +69,7 @@ function fileIcon(fileType: string) {
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   return `${(bytes / 1024).toFixed(1)} KB`
 }
 
@@ -260,7 +264,14 @@ export function FileTreeBrowser(props: FileTreeBrowserProps) {
   function handleAddFile() {
     if (!newPath.trim()) return
     if ("onFileAdd" in props && props.onFileAdd) {
-      props.onFileAdd({ path: newPath.trim(), content: "", file_type: newFileType })
+      props.onFileAdd({
+        path: newPath.trim(),
+        content: "",
+        file_type: newFileType,
+        mime_type: "text/plain",
+        encoding: "utf-8",
+        size_bytes: 0,
+      })
     }
     setNewPath("")
     setNewFileType("text")
@@ -335,6 +346,7 @@ export function FileTreeBrowser(props: FileTreeBrowserProps) {
                     <SelectItem value="markdown">Markdown</SelectItem>
                     <SelectItem value="html">HTML</SelectItem>
                     <SelectItem value="yaml">YAML</SelectItem>
+                    <SelectItem value="json">JSON</SelectItem>
                     <SelectItem value="javascript">JavaScript</SelectItem>
                     <SelectItem value="typescript">TypeScript</SelectItem>
                     <SelectItem value="shell">Shell</SelectItem>

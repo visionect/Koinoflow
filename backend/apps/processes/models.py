@@ -137,9 +137,13 @@ class FileTypeChoices(models.TextChoices):
     MARKDOWN = "markdown"
     HTML = "html"
     YAML = "yaml"
+    JSON = "json"
     JAVASCRIPT = "javascript"
     TYPESCRIPT = "typescript"
     SHELL = "shell"
+    IMAGE = "image"
+    PDF = "pdf"
+    BINARY = "binary"
     TEXT = "text"
     OTHER = "other"
 
@@ -152,11 +156,15 @@ class VersionFile(BaseModel):
     )
     path = models.CharField(max_length=500)
     content = models.TextField(default="")
+    content_bytes = models.BinaryField(default=b"", blank=True)
     file_type = models.CharField(
         max_length=50,
         choices=FileTypeChoices.choices,
         default=FileTypeChoices.TEXT,
     )
+    mime_type = models.CharField(max_length=100, blank=True, default="text/plain")
+    encoding = models.CharField(max_length=20, blank=True, default="utf-8")
+    sha256 = models.CharField(max_length=64, blank=True, default="")
     size_bytes = models.PositiveIntegerField(default=0)
     is_deleted = models.BooleanField(default=False)
 

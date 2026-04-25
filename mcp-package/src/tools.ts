@@ -16,7 +16,7 @@ function extractVersionData(data: Record<string, unknown>): {
   content_md: string;
   frontmatter_yaml: string;
   version_number?: number;
-  files: Array<{ path: string; file_type: string; size_bytes: number }>;
+  files: Array<{ path: string; file_type: string; size_bytes: number; mime_type?: string }>;
   koinoflow_metadata: KoinoflowMetadata;
 } | null {
   const current = (data.current_version ?? data) as Record<
@@ -50,6 +50,10 @@ function extractVersionData(data: Record<string, unknown>): {
               typeof candidate.file_type === "string"
                 ? candidate.file_type
                 : "text",
+            mime_type:
+              typeof candidate.mime_type === "string"
+                ? candidate.mime_type
+                : undefined,
             size_bytes: candidate.size_bytes,
           },
         ];
@@ -162,12 +166,12 @@ function buildKoinoflowContextBlock(metadata: KoinoflowMetadata): string {
 }
 
 function formatSupportFiles(
-  files: Array<{ path: string; file_type: string; size_bytes: number }>,
+  files: Array<{ path: string; file_type: string; size_bytes: number; mime_type?: string }>,
 ): string {
   const lines = [`\n\n---\n## Support Files (${files.length} files)`];
   for (const file of files) {
     const sizeKb = Math.round((file.size_bytes / 1024) * 10) / 10;
-    lines.push(`- ${file.path} (${file.file_type}, ${sizeKb} KB)`);
+    lines.push(`- ${file.path} (${file.mime_type ?? file.file_type}, ${sizeKb} KB)`);
   }
   return lines.join("\n");
 }
@@ -391,6 +395,76 @@ export function registerTools(
         }
 
         return { content: [{ type: "text" as const, text }] };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${e}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
+    "read_process_file",
+    "Read a support file attached to a Koinoflow process. Text files are returned directly; binary files return JSON containing content_base64, MIME type, size, and path.",
+    {
+      slug: z.string().describe('The process slug, for example "deploy-to-production"'),
+      file_path: z.string().describe('Path of the support file, for example "images/template.png"'),
+      version: z
+        .number()
+        .optional()
+        .describe("Optional specific version number; defaults to latest published version"),
+    },
+    async ({ slug, file_path, version }) => {
+      try {
+        let versionNumber = version;
+        if (versionNumber === undefined) {
+          const data = (await client.getProcess(slug)) as unknown as Record<
+            string,
+            unknown
+          >;
+          const ver = extractVersionData(data);
+          versionNumber = ver?.version_number;
+        }
+        if (versionNumber === undefined) {
+          return {
+            content: [
+              {
+                type: "text" as const,
+                text: "Error: could not determine version number",
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const file = await client.getProcessFile(slug, versionNumber, file_path);
+        if (typeof file.content === "string") {
+          const header = `# ${file.path} (${file.file_type}, ${file.mime_type ?? "text/plain"}, ${file.size_bytes} bytes)\n\n`;
+          return {
+            content: [{ type: "text" as const, text: header + file.content }],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                {
+                  path: file.path,
+                  file_type: file.file_type,
+                  mime_type: file.mime_type ?? "application/octet-stream",
+                  encoding: file.encoding ?? "base64",
+                  size_bytes: file.size_bytes,
+                  content_base64: file.content_base64,
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
       } catch (e) {
         return {
           content: [{ type: "text" as const, text: `Error: ${e}` }],

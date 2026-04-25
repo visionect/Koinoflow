@@ -117,7 +117,15 @@ function ImportFrontmatterPreview({ data }: { data: SkillImportData }) {
 function ImportFilePreview({
   files,
 }: {
-  files: { path: string; content: string; file_type: string }[]
+  files: {
+    path: string
+    content?: string | null
+    content_base64?: string | null
+    file_type: string
+    mime_type?: string | null
+    encoding?: string | null
+    size_bytes?: number
+  }[]
 }) {
   const [expanded, setExpanded] = React.useState(false)
 
@@ -125,7 +133,10 @@ function ImportFilePreview({
     id: `preview-${i}`,
     path: f.path,
     file_type: f.file_type,
-    size_bytes: new Blob([f.content]).size,
+    mime_type: f.mime_type ?? "application/octet-stream",
+    encoding: f.encoding ?? (f.content_base64 ? "base64" : "utf-8"),
+    size_bytes:
+      f.size_bytes ?? (f.content !== undefined && f.content !== null ? new Blob([f.content]).size : 0),
   }))
 
   const totalSize = previewFiles.reduce((sum, f) => sum + f.size_bytes, 0)

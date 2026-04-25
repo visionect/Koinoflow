@@ -1,3 +1,4 @@
+import base64
 import io
 import zipfile
 from datetime import timedelta
@@ -1499,6 +1500,71 @@ class TestImportWithFiles:
         paths = {f["path"] for f in files_resp.json()}
         assert "scripts/foo.py" in paths
         assert "references/bar.md" in paths
+
+    def test_import_export_preserves_binary_support_file(self, auth_client, admin_membership):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        dept = _make_dept_for_files(admin_membership.workspace)
+        process = ProcessFactory(
+            department=dept, slug="proc-binary", status=StatusChoices.PUBLISHED
+        )
+
+        png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00binary-image"
+        skill_md = "---\nname: binary-import\n---\n\n# Imported Process\n"
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("proc-binary/SKILL.md", skill_md)
+            zf.writestr("proc-binary/images/template.png", png_bytes)
+        buf.seek(0)
+
+        uploaded = SimpleUploadedFile(
+            "proc-binary.skill", buf.read(), content_type="application/zip"
+        )
+        resp = auth_client.post("/api/v1/processes/proc-binary/import", data={"file": uploaded})
+        assert resp.status_code == 201
+        version_number = resp.json()["version_number"]
+
+        detail_resp = auth_client.get(
+            f"/api/v1/processes/proc-binary/versions/{version_number}/files/images/template.png"
+        )
+        assert detail_resp.status_code == 200
+        detail = detail_resp.json()
+        assert detail["file_type"] == "image"
+        assert detail["mime_type"] == "image/png"
+        assert detail["content"] is None
+        assert base64.b64decode(detail["content_base64"]) == png_bytes
+
+        process.current_version_id = ProcessVersion.objects.get(
+            process=process, version_number=version_number
+        ).id
+        process.save(update_fields=["current_version"])
+
+        export_resp = auth_client.get("/api/v1/processes/proc-binary/export")
+        assert export_resp.status_code == 200
+        with zipfile.ZipFile(io.BytesIO(export_resp.content)) as zf:
+            assert zf.read("proc-binary/images/template.png") == png_bytes
+
+    def test_import_rejects_oversized_support_file(self, auth_client, admin_membership):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        dept = _make_dept_for_files(admin_membership.workspace)
+        ProcessFactory(department=dept, slug="proc-large")
+
+        skill_md = "---\nname: large\n---\n\n# Body\n"
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("proc-large/SKILL.md", skill_md)
+            zf.writestr("proc-large/assets/too-large.bin", b"x" * (1024 * 1024 + 1))
+        buf.seek(0)
+
+        uploaded = SimpleUploadedFile(
+            "proc-large.skill", buf.read(), content_type="application/zip"
+        )
+        resp = auth_client.post("/api/v1/processes/proc-large/import", data={"file": uploaded})
+
+        assert resp.status_code == 413
+        assert "assets/too-large.bin" in resp.json()["detail"]
+        assert "max per file" in resp.json()["detail"]
 
     def test_import_rejects_path_traversal_entries(self, auth_client, admin_membership):
         from django.core.files.uploadedfile import SimpleUploadedFile
