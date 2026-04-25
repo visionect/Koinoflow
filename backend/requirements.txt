@@ -33,4 +33,4 @@ anthropic[vertex]>=0.52.0,<1.0.0
 ruff>=0.6,<1.0
 pytest>=8.0,<9.0
 pytest-django>=4.8,<5.0
-factory-boy>=3.3,<4.0
+factory-boy>=3.3.3,<4.0
