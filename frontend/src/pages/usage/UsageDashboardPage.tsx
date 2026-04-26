@@ -590,7 +590,7 @@ function KpiStripWidget({ kpis, loading }: { kpis: UsageKpis | undefined; loadin
       />
       <KpiCard
         label="Skills touched"
-        value={(kpis?.skills_touched ?? 0).toLocaleString()}
+        value={(kpis?.processes_touched ?? 0).toLocaleString()}
         sublabel="Retrieved at least once"
         hint="Count of distinct skills that have been retrieved in the selected period."
         loading={loading}
