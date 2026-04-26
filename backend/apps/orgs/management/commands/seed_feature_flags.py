@@ -4,7 +4,6 @@ from apps.orgs.models import FeatureFlag
 
 FEATURE_FLAGS = [
     "capture",
-    "agents",
 ]
 
 

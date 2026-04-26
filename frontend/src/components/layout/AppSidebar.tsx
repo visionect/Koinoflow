@@ -5,6 +5,7 @@ import {
   FileTextIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
+  PlugIcon,
   PlugZapIcon,
   SettingsIcon,
   SparklesIcon,
@@ -129,7 +130,7 @@ const SETTINGS_LINKS = [
   {
     label: "MCP",
     tooltip: "Connect AI clients (Cursor, Claude Desktop, …) to this workspace.",
-    icon: BotIcon,
+    icon: PlugIcon,
     href: "/settings/mcp",
   },
   {
@@ -245,25 +246,23 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        {hasFeature("agents") && (
-          <SidebarGroup>
-            <SidebarGroupLabel>Agents</SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {AGENTS_LINKS.map((item) => (
-                  <SidebarMenuItem key={item.label}>
-                    <SidebarMenuButton asChild tooltip={item.tooltip ?? item.label}>
-                      <NavLink to={buildWorkspacePath(workspace, item.href)}>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+        <SidebarGroup>
+          <SidebarGroupLabel>Agents</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {AGENTS_LINKS.map((item) => (
+                <SidebarMenuItem key={item.label}>
+                  <SidebarMenuButton asChild tooltip={item.tooltip ?? item.label}>
+                    <NavLink to={buildWorkspacePath(workspace, item.href)}>
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
         <SidebarGroup>
           <SidebarGroupLabel>Workspace</SidebarGroupLabel>

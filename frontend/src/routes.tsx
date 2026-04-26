@@ -90,14 +90,7 @@ export function AppRoutes() {
         <Route path="settings/members" element={<MembersPage />} />
         <Route path="settings/mcp" element={<McpPage />} />
         <Route path="settings/keys" element={<ApiKeysPage />} />
-        <Route
-          path="agents"
-          element={
-            <RequireFeature flag="agents">
-              <AgentsPage />
-            </RequireFeature>
-          }
-        />
+        <Route path="agents" element={<AgentsPage />} />
         <Route
           path="capture/connectors"
           element={

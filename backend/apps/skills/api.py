@@ -253,6 +253,7 @@ class SkillDetailOut(Schema):
     department_name: str
     team_slug: str
     team_name: str
+    system_kind: str
     owner: UserBriefOut | None
     current_version: SkillVersionOut | None
     last_reviewed_at: str | None
@@ -736,6 +737,7 @@ def _skill_detail_out(p, requester_team_id=None):
         "department_name": p.department.name,
         "team_slug": _get_slug(EntityType.TEAM, p.department.team_id),
         "team_name": p.department.team.name,
+        "system_kind": p.department.system_kind or "",
         "owner": _user_brief(p.owner),
         "current_version": cv,
         "last_reviewed_at": p.last_reviewed_at.isoformat() if p.last_reviewed_at else None,
@@ -788,7 +790,11 @@ def _get_skill(request, slug: str, *, allow_draft=True):
         if not allowed.exists():
             raise HttpError(404, "Skill not found")
     elif skill.department.system_kind == SYSTEM_KIND_AGENTS:
-        raise HttpError(404, "Skill not found")
+        is_api_key = hasattr(request, "api_key")
+        is_oauth = hasattr(request, "oauth_token")
+        membership = getattr(request, "membership", None)
+        if is_api_key or is_oauth or membership is None or membership.role != RoleChoices.ADMIN:
+            raise HttpError(404, "Skill not found")
 
     is_api_key = hasattr(request, "api_key")
     if is_api_key and not allow_draft and skill.status != StatusChoices.PUBLISHED:

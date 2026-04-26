@@ -15,7 +15,7 @@ from django.views.decorators.http import require_POST
 from oauth2_provider.models import AccessToken
 
 from apps.orgs.middleware import resolve_membership_for_user
-from apps.orgs.models import CoreSlug, EntityType, WorkspaceFeatureFlag
+from apps.orgs.models import CoreSlug, EntityType
 
 
 def _secrets_equal(a: str, b: str) -> bool:
@@ -84,13 +84,6 @@ def introspect_token(request):
                 is_active=True,
             )
         except Agent.DoesNotExist:
-            return JsonResponse({"active": False})
-
-        feature_enabled = WorkspaceFeatureFlag.objects.filter(
-            workspace=agent.workspace,
-            flag__name="agents",
-        ).exists()
-        if not feature_enabled:
             return JsonResponse({"active": False})
 
         agent.last_used_at = timezone.now()

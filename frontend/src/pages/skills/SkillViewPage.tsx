@@ -22,6 +22,8 @@ import { Link, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import {
+  useAgents,
+  useAgentSkillDeployment,
   useDeleteSkill,
   useDepartments,
   useEffectiveSettings,
@@ -30,6 +32,7 @@ import {
   useReviewSkill,
   useSkills,
   useUnshareSkillFromMyTeam,
+  useUpdateAgentSkillDeployment,
   useUpdateSkill,
   useUpdateVersionSummary,
   useVersion,
@@ -156,7 +159,12 @@ export function SkillViewPage() {
   const { user, isAdmin, isEditor } = useAuth()
 
   const skillQuery = useSkill(skillSlug ?? "")
-  const canWrite = skillQuery.data?.visibility === "workspace" ? isAdmin : isEditor
+  const isAgentSkill = skillQuery.data?.system_kind === "agents"
+  const canWrite = isAgentSkill
+    ? isAdmin
+    : skillQuery.data?.visibility === "workspace"
+      ? isAdmin
+      : isEditor
   const versionsQuery = useVersions(skillSlug ?? "")
   const membersQuery = useWorkspaceMembers()
   const updateSkill = useUpdateSkill(skillSlug ?? "")
@@ -725,9 +733,9 @@ export function SkillViewPage() {
       {importFileInput}
 
       <Button asChild size="sm" variant="ghost">
-        <Link to={buildWorkspacePath(workspace, "/skills")}>
+        <Link to={buildWorkspacePath(workspace, isAgentSkill ? "/agents" : "/skills")}>
           <ArrowLeftIcon />
-          All skills
+          {isAgentSkill ? "Agents" : "All skills"}
         </Link>
       </Button>
 
@@ -838,7 +846,7 @@ export function SkillViewPage() {
                     Metadata
                   </DropdownMenuItem>
                 ) : null}
-                {canWrite ? (
+                {canWrite && !isAgentSkill ? (
                   <DropdownMenuItem onClick={() => setScopeOpen(true)}>
                     <GlobeIcon className="mr-2 size-4" />
                     Change scope
@@ -1212,87 +1220,94 @@ export function SkillViewPage() {
                   <p className="text-muted-foreground">Owner</p>
                   <p className="font-medium">{getDisplayName(skillQuery.data.owner)}</p>
                 </div>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <p className="text-muted-foreground">
-                      {skillQuery.data.visibility === "team" ||
-                      skillQuery.data.visibility === "workspace"
-                        ? "Deployment"
-                        : allDepartments.length > 1
-                          ? "Departments"
-                          : "Department"}
-                    </p>
-                    {canWrite ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-muted-foreground hover:text-foreground"
-                        onClick={() => setScopeOpen(true)}
-                        title="Change scope"
-                      >
-                        <GlobeIcon className="size-3.5" />
-                      </Button>
-                    ) : null}
-                  </div>
-                  {skillQuery.data.visibility === "team" ? (
-                    <Button asChild className="h-auto p-0 text-left" variant="link">
-                      <Link
-                        to={buildWorkspacePath(workspace, `/teams/${skillQuery.data.team_slug}`)}
-                      >
-                        {skillQuery.data.team_name} (team-wide)
-                      </Link>
-                    </Button>
-                  ) : skillQuery.data.visibility === "workspace" ? (
-                    <p className="font-medium">Workspace-wide</p>
-                  ) : allDepartments.length <= 1 ? (
-                    department ? (
+                {isAgentSkill ? (
+                  <AgentDeploymentBlock
+                    skillSlug={skillQuery.data.slug}
+                    canWrite={canWrite}
+                  />
+                ) : (
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <p className="text-muted-foreground">
+                        {skillQuery.data.visibility === "team" ||
+                        skillQuery.data.visibility === "workspace"
+                          ? "Deployment"
+                          : allDepartments.length > 1
+                            ? "Departments"
+                            : "Department"}
+                      </p>
+                      {canWrite ? (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                          onClick={() => setScopeOpen(true)}
+                          title="Change scope"
+                        >
+                          <GlobeIcon className="size-3.5" />
+                        </Button>
+                      ) : null}
+                    </div>
+                    {skillQuery.data.visibility === "team" ? (
                       <Button asChild className="h-auto p-0 text-left" variant="link">
-                        <Link to={buildWorkspacePath(workspace, `/depts/${department.id}`)}>
-                          {skillQuery.data.team_name} / {skillQuery.data.department_name}
+                        <Link
+                          to={buildWorkspacePath(workspace, `/teams/${skillQuery.data.team_slug}`)}
+                        >
+                          {skillQuery.data.team_name} (team-wide)
                         </Link>
                       </Button>
-                    ) : (
-                      <p className="font-medium">
-                        {skillQuery.data.team_name} / {skillQuery.data.department_name}
-                      </p>
-                    )
-                  ) : (
-                    <Collapsible>
-                      <CollapsibleTrigger className="group flex w-full items-center justify-between gap-1">
+                    ) : skillQuery.data.visibility === "workspace" ? (
+                      <p className="font-medium">Workspace-wide</p>
+                    ) : allDepartments.length <= 1 ? (
+                      department ? (
                         <Button asChild className="h-auto p-0 text-left" variant="link">
-                          <Link
-                            to={buildWorkspacePath(workspace, `/depts/${department?.id}`)}
-                            onClick={(e) => e.stopPropagation()}
-                          >
+                          <Link to={buildWorkspacePath(workspace, `/depts/${department.id}`)}>
                             {skillQuery.data.team_name} / {skillQuery.data.department_name}
                           </Link>
                         </Button>
-                        <span className="flex items-center gap-1">
-                          <Badge variant="secondary" className="text-[10px] tabular-nums">
-                            +{sharedDepartments.length}
-                          </Badge>
-                          <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-                        </span>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="mt-1.5 space-y-1 border-l-2 border-border pl-3">
-                          {sharedDepartments.map((dept) => (
-                            <Button
-                              key={dept.id}
-                              asChild
-                              className="h-auto p-0 text-left text-xs"
-                              variant="link"
+                      ) : (
+                        <p className="font-medium">
+                          {skillQuery.data.team_name} / {skillQuery.data.department_name}
+                        </p>
+                      )
+                    ) : (
+                      <Collapsible>
+                        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-1">
+                          <Button asChild className="h-auto p-0 text-left" variant="link">
+                            <Link
+                              to={buildWorkspacePath(workspace, `/depts/${department?.id}`)}
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              <Link to={buildWorkspacePath(workspace, `/depts/${dept.id}`)}>
-                                {dept.team_name} / {dept.name}
-                              </Link>
-                            </Button>
-                          ))}
-                        </div>
-                      </CollapsibleContent>
-                    </Collapsible>
-                  )}
-                </div>
+                              {skillQuery.data.team_name} / {skillQuery.data.department_name}
+                            </Link>
+                          </Button>
+                          <span className="flex items-center gap-1">
+                            <Badge variant="secondary" className="text-[10px] tabular-nums">
+                              +{sharedDepartments.length}
+                            </Badge>
+                            <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+                          </span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="mt-1.5 space-y-1 border-l-2 border-border pl-3">
+                            {sharedDepartments.map((dept) => (
+                              <Button
+                                key={dept.id}
+                                asChild
+                                className="h-auto p-0 text-left text-xs"
+                                variant="link"
+                              >
+                                <Link to={buildWorkspacePath(workspace, `/depts/${dept.id}`)}>
+                                  {dept.team_name} / {dept.name}
+                                </Link>
+                              </Button>
+                            ))}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Last validated</p>
                   <p className="font-medium">
@@ -1477,6 +1492,158 @@ export function SkillViewPage() {
         skill={skillQuery.data}
         isAdmin={isAdmin}
       />
+    </div>
+  )
+}
+
+function AgentDeploymentBlock({
+  skillSlug,
+  canWrite,
+}: {
+  skillSlug: string
+  canWrite: boolean
+}) {
+  const deploymentQuery = useAgentSkillDeployment(skillSlug)
+  const agentsQuery = useAgents()
+  const updateDeployment = useUpdateAgentSkillDeployment(skillSlug)
+
+  const [editing, setEditing] = React.useState(false)
+  const [deployToAll, setDeployToAll] = React.useState(true)
+  const [agentIds, setAgentIds] = React.useState<Set<string>>(new Set())
+
+  React.useEffect(() => {
+    if (deploymentQuery.data) {
+      setDeployToAll(deploymentQuery.data.deploy_to_all)
+      setAgentIds(new Set(deploymentQuery.data.agent_ids))
+    }
+  }, [deploymentQuery.data])
+
+  function toggleAgent(id: string, checked: boolean) {
+    setAgentIds((current) => {
+      const next = new Set(current)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  async function handleSave() {
+    try {
+      await updateDeployment.mutateAsync({
+        deploy_to_all: deployToAll,
+        agent_ids: deployToAll ? [] : [...agentIds],
+      })
+      toast.success("Deployment updated")
+      setEditing(false)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update deployment")
+    }
+  }
+
+  function handleCancel() {
+    if (deploymentQuery.data) {
+      setDeployToAll(deploymentQuery.data.deploy_to_all)
+      setAgentIds(new Set(deploymentQuery.data.agent_ids))
+    }
+    setEditing(false)
+  }
+
+  const data = deploymentQuery.data
+  const summary = data
+    ? data.deploy_to_all
+      ? "All agents"
+      : `${data.agent_ids.length} selected agent${data.agent_ids.length === 1 ? "" : "s"}`
+    : "Loading…"
+  const saveDisabled =
+    updateDeployment.isPending || (!deployToAll && agentIds.size === 0)
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <p className="text-muted-foreground">Agent deployment</p>
+        {canWrite && !editing ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs text-muted-foreground hover:text-foreground"
+            onClick={() => setEditing(true)}
+          >
+            <PencilIcon className="size-3" />
+            Edit
+          </Button>
+        ) : null}
+      </div>
+      {editing ? (
+        <div className="space-y-3 rounded-md border p-3">
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="radio"
+              checked={deployToAll}
+              onChange={() => setDeployToAll(true)}
+              className="mt-1"
+            />
+            <span>
+              <span className="block font-medium">Deploy to all agents</span>
+              <span className="block text-xs text-muted-foreground">
+                Every agent in this workspace can retrieve this skill.
+              </span>
+            </span>
+          </label>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="radio"
+              checked={!deployToAll}
+              onChange={() => setDeployToAll(false)}
+              className="mt-1"
+            />
+            <span>
+              <span className="block font-medium">Selected agents only</span>
+              <span className="block text-xs text-muted-foreground">
+                Pick which agents receive this skill.
+              </span>
+            </span>
+          </label>
+          {!deployToAll ? (
+            <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
+              {agentsQuery.data?.length ? (
+                agentsQuery.data.map((agent) => (
+                  <label
+                    key={agent.id}
+                    className="flex items-start gap-2 rounded p-1.5 text-sm hover:bg-muted/50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={agentIds.has(agent.id)}
+                      onChange={(e) => toggleAgent(agent.id, e.target.checked)}
+                      className="mt-1"
+                    />
+                    <span>
+                      <span className="block font-medium">{agent.name}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {agent.masked_token}
+                      </span>
+                    </span>
+                  </label>
+                ))
+              ) : (
+                <p className="px-1 py-2 text-xs text-muted-foreground">
+                  No agents yet. Create one from the Agents tab.
+                </p>
+              )}
+            </div>
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <Button size="sm" variant="ghost" onClick={handleCancel}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={saveDisabled} onClick={() => void handleSave()}>
+              {updateDeployment.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <p className="font-medium">{summary}</p>
+      )}
     </div>
   )
 }

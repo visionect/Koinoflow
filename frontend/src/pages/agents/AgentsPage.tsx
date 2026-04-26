@@ -1,6 +1,15 @@
 import * as React from "react"
 
-import { CopyIcon, KeyRoundIcon, PlusIcon, RotateCwIcon, UploadIcon } from "lucide-react"
+import {
+  CopyIcon,
+  HistoryIcon,
+  KeyRoundIcon,
+  PencilIcon,
+  PlusIcon,
+  RotateCwIcon,
+  UploadIcon,
+} from "lucide-react"
+import { Link, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import {
@@ -18,7 +27,7 @@ import { ErrorState } from "@/components/shared/ErrorState"
 import { PageHeader } from "@/components/shared/PageHeader"
 import { useAuth } from "@/hooks/useAuth"
 import { type SkillImportData, useSkillImport } from "@/hooks/use-skill-import"
-import { formatRelativeDate } from "@/lib/format"
+import { buildWorkspacePath, formatRelativeDate } from "@/lib/format"
 import type { Agent, CreatedAgent } from "@/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -281,6 +290,7 @@ function ImportAgentSkillDialog({
 
 export function AgentsPage() {
   const { isAdmin } = useAuth()
+  const { workspace } = useParams<{ workspace: string }>()
   const agentsQuery = useAgents()
   const skillsQuery = useAgentSkills()
   const analyticsQuery = useAgentAnalytics(30)
@@ -453,19 +463,41 @@ export function AgentsPage() {
                     <TableHead>Skill</TableHead>
                     <TableHead>Deployment</TableHead>
                     <TableHead>Updated</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {skillsQuery.data.map((skill) => (
                     <TableRow key={skill.id}>
                       <TableCell>
-                        <div className="font-medium">{skill.title}</div>
-                        <div className="text-xs text-muted-foreground">{skill.slug}</div>
+                        <Link
+                          to={buildWorkspacePath(workspace, `/skills/${skill.slug}`)}
+                          className="block hover:underline"
+                        >
+                          <div className="font-medium">{skill.title}</div>
+                          <div className="text-xs text-muted-foreground">{skill.slug}</div>
+                        </Link>
                       </TableCell>
                       <TableCell>
                         {skill.deploy_to_all ? "All agents" : `${skill.agent_ids.length} selected agents`}
                       </TableCell>
                       <TableCell>{formatRelativeDate(skill.updated_at)}</TableCell>
+                      <TableCell className="space-x-2 text-right">
+                        <Button asChild size="sm" variant="outline">
+                          <Link to={buildWorkspacePath(workspace, `/skills/${skill.slug}`)}>
+                            <PencilIcon aria-hidden />
+                            Open
+                          </Link>
+                        </Button>
+                        <Button asChild size="sm" variant="ghost">
+                          <Link
+                            to={buildWorkspacePath(workspace, `/skills/${skill.slug}/history`)}
+                          >
+                            <HistoryIcon aria-hidden />
+                            History
+                          </Link>
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
