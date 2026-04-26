@@ -43,6 +43,7 @@ import { FileEditor } from "@/components/editor/FileEditor"
 import { FrontmatterForm } from "@/components/editor/FrontmatterForm"
 import { KoinoflowMetadataForm } from "@/components/editor/KoinoflowMetadataForm"
 import { MarkdownEditor } from "@/components/editor/MarkdownEditor"
+import { DiscoveryEmbeddingStatusBadge } from "@/components/processes/DiscoveryEmbeddingStatusBadge"
 import { FileTreeBrowser } from "@/components/processes/FileTreeBrowser"
 import { KoinoflowMetadataStrip } from "@/components/processes/KoinoflowMetadataStrip"
 import { SkillMetadataPanel } from "@/components/processes/SkillMetadataPanel"
@@ -199,6 +200,20 @@ export function ProcessViewPage() {
   const requireChangeSummary = settingsQuery.data?.require_change_summary === true
 
   const isTeamManager = isEditor && !isAdmin
+  const discoveryEmbeddingStatus = processQuery.data?.discovery_embedding_status
+  const refetchProcess = processQuery.refetch
+
+  React.useEffect(() => {
+    if (discoveryEmbeddingStatus !== "pending") {
+      return
+    }
+
+    const intervalId = window.setInterval(() => {
+      void refetchProcess()
+    }, 4000)
+
+    return () => window.clearInterval(intervalId)
+  }, [discoveryEmbeddingStatus, refetchProcess])
 
   const [isEditing, setIsEditing] = React.useState(false)
   const [metadataOpen, setMetadataOpen] = React.useState(false)
@@ -1176,6 +1191,12 @@ export function ProcessViewPage() {
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Status</p>
                   <StatusBadge status={processQuery.data.status} />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-muted-foreground">Semantic discovery</p>
+                  <DiscoveryEmbeddingStatusBadge
+                    status={processQuery.data.discovery_embedding_status}
+                  />
                 </div>
                 <div className="space-y-1">
                   <p className="text-muted-foreground">Version</p>
