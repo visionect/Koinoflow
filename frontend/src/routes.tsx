@@ -10,10 +10,10 @@ import { DashboardPage } from "@/pages/DashboardPage"
 import { DepartmentDetailPage } from "@/pages/departments/DepartmentDetailPage"
 import { LoginPage } from "@/pages/LoginPage"
 import { OnboardingPage } from "@/pages/OnboardingPage"
-import { ProcessEditPage } from "@/pages/processes/ProcessEditPage"
-import { ProcessHistoryPage } from "@/pages/processes/ProcessHistoryPage"
-import { ProcessListPage } from "@/pages/processes/ProcessListPage"
-import { ProcessViewPage } from "@/pages/processes/ProcessViewPage"
+import { SkillEditPage } from "@/pages/skills/SkillEditPage"
+import { SkillHistoryPage } from "@/pages/skills/SkillHistoryPage"
+import { SkillListPage } from "@/pages/skills/SkillListPage"
+import { SkillViewPage } from "@/pages/skills/SkillViewPage"
 import { ApiKeysPage } from "@/pages/settings/ApiKeysPage"
 import { McpPage } from "@/pages/settings/McpPage"
 import { CandidatesPage } from "@/pages/capture/CandidatesPage"
@@ -81,10 +81,10 @@ export function AppRoutes() {
         <Route path="teams" element={<TeamListPage />} />
         <Route path="teams/:teamSlug" element={<TeamDetailPage />} />
         <Route path="depts/:departmentId" element={<DepartmentDetailPage />} />
-        <Route path="processes" element={<ProcessListPage />} />
-        <Route path="processes/:processSlug" element={<ProcessViewPage />} />
-        <Route path="processes/:processSlug/edit" element={<ProcessEditPage />} />
-        <Route path="processes/:processSlug/history" element={<ProcessHistoryPage />} />
+        <Route path="skills" element={<SkillListPage />} />
+        <Route path="skills/:skillSlug" element={<SkillViewPage />} />
+        <Route path="skills/:skillSlug/edit" element={<SkillEditPage />} />
+        <Route path="skills/:skillSlug/history" element={<SkillHistoryPage />} />
         <Route path="settings" element={<SettingsPage />} />
         <Route path="settings/members" element={<MembersPage />} />
         <Route path="settings/mcp" element={<McpPage />} />

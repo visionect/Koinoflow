@@ -1,6 +1,6 @@
 # @koinoflow/mcp
 
-MCP server for [Koinoflow](https://github.com/visionect/Koinoflow) — access your organization's operational processes from AI clients like Claude Desktop, Cursor, and VS Code.
+MCP server for [Koinoflow](https://github.com/visionect/Koinoflow) — access your organization's operational skills from AI clients like Claude Desktop, Cursor, and VS Code.
 
 ## Prerequisites
 
@@ -81,22 +81,22 @@ Add to `.vscode/mcp.json`:
 
 ## Available Tools
 
-### `read_process`
+### `read_skill`
 
-Read a specific process by its slug. Returns the full Markdown content with YAML frontmatter and, by default, a support-file manifest.
+Read a specific skill by its slug. Returns the full Markdown content with YAML frontmatter and, by default, a support-file manifest.
 
 **Parameters:**
 
-- `slug` (string, required) — The process slug, e.g. `"deploy-to-production"`
+- `slug` (string, required) — The skill slug, e.g. `"deploy-to-production"`
 - `version` (number, optional) — Specific version number; defaults to latest published
 - `include_files` (boolean, optional, default `true`) — Append a support-file listing; set to `false` to return only the main markdown
 
-### `discover_processes`
+### `discover_skills`
 
-Find the most relevant process for a natural-language task. Use this when the
+Find the most relevant skill for a natural-language task. Use this when the
 slug is unknown; it returns ranked candidates with scores, match reasons,
 snippets, risk/approval metadata, and semantic indexing status. Call
-`read_process` with the best matching slug before following the process.
+`read_skill` with the best matching slug before following the skill.
 
 **Parameters:**
 
@@ -105,10 +105,10 @@ snippets, risk/approval metadata, and semantic indexing status. Call
 - `team` (string, optional) — Filter by team slug
 - `limit` (number, optional, default `10`) — Ranked candidates to return, capped at `25`
 
-### `list_processes`
+### `list_skills`
 
-Browse or page through available processes in the workspace. Prefer
-`discover_processes` for task-based discovery.
+Browse or page through available skills in the workspace. Prefer
+`discover_skills` for task-based discovery.
 
 **Parameters:**
 

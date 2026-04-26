@@ -125,7 +125,7 @@ class CandidateOut(Schema):
     automation_reasoning: str
     integration_needs: list[dict]
     status: str
-    promoted_process_slug: str | None
+    promoted_skill_slug: str | None
     sources: list[CandidateSourceBriefOut] | None
     created_at: str
 
@@ -144,7 +144,7 @@ class PromoteCandidateIn(Schema):
 
 
 class PromoteOut(Schema):
-    process_slug: str
+    skill_slug: str
 
 
 # ── Capture funnel stats ──────────────────────────────────────────────────
@@ -765,8 +765,8 @@ def promote_candidate(
     from django.utils.text import slugify
 
     from apps.orgs.models import Department
-    from apps.processes.enums import StatusChoices, VisibilityChoices
-    from apps.processes.models import Process, ProcessVersion
+    from apps.skills.enums import StatusChoices, VisibilityChoices
+    from apps.skills.models import Skill, SkillVersion
 
     workspace = request.workspace
 
@@ -796,9 +796,9 @@ def promote_candidate(
     from django.db.models import IntegerField, Max
     from django.db.models.functions import Cast, Substr
 
-    base_slug = slugify(title)[:180] or "process"
+    base_slug = slugify(title)[:180] or "skill"
     with transaction.atomic():
-        ws_processes = Process.objects.filter(department__team__workspace=workspace)
+        ws_processes = Skill.objects.filter(department__team__workspace=workspace)
         if not ws_processes.filter(slug=base_slug).exists():
             process_slug = base_slug
         else:
@@ -822,7 +822,7 @@ def promote_candidate(
 
             owner = User.objects.filter(id=payload.owner_id).first()
 
-        process = Process.objects.create(
+        skill = Skill.objects.create(
             department=department,
             owner=owner or (request.user if request.user.is_authenticated else None),
             title=title,
@@ -832,8 +832,8 @@ def promote_candidate(
             visibility=VisibilityChoices.DEPARTMENT,
         )
 
-        version = ProcessVersion.objects.create(
-            process=process,
+        version = SkillVersion.objects.create(
+            skill=skill,
             authored_by=request.user if request.user.is_authenticated else None,
             version_number=1,
             content_md=candidate.content_md,
@@ -841,14 +841,14 @@ def promote_candidate(
             change_summary="Promoted from Confluence via AI extraction",
         )
 
-        process.current_version = version
-        process.save(update_fields=["current_version", "updated_at"])
+        skill.current_version = version
+        skill.save(update_fields=["current_version", "updated_at"])
 
         candidate.status = CandidateStatus.PROMOTED
-        candidate.promoted_process = process
+        candidate.promoted_skill = skill
         candidate.save(update_fields=["status", "promoted_process", "updated_at"])
 
-    return PromoteOut(process_slug=process.slug)
+    return PromoteOut(skill_slug=skill.slug)
 
 
 # ── Dismiss ───────────────────────────────────────────────────────────────
@@ -968,14 +968,14 @@ def _build_extraction_job_out(job: ExtractionJob) -> ExtractionJobOut:
 
 def _build_candidate_out(candidate: CaptureCandidate, *, include_sources: bool) -> CandidateOut:
     promoted_slug = None
-    if candidate.promoted_process_id:
-        from apps.processes.models import Process
+    if candidate.promoted_skill_id:
+        from apps.skills.models import Skill
 
         try:
-            promoted_slug = Process.objects.values_list("slug", flat=True).get(
-                id=candidate.promoted_process_id
+            promoted_slug = Skill.objects.values_list("slug", flat=True).get(
+                id=candidate.promoted_skill_id
             )
-        except Process.DoesNotExist:
+        except Skill.DoesNotExist:
             pass
 
     sources = None

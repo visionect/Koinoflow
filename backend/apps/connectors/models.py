@@ -238,8 +238,8 @@ class CaptureCandidate(BaseModel):
         choices=CandidateStatus.choices,
         default=CandidateStatus.PENDING,
     )
-    promoted_process = models.ForeignKey(
-        "processes.Process",
+    promoted_skill = models.ForeignKey(
+        "skills.Skill",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

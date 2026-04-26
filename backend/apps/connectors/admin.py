@@ -74,7 +74,7 @@ class CaptureCandidateAdmin(admin.ModelAdmin):
         "created_at",
     )
     list_filter = ("automation_tier", "status", "credential__provider")
-    readonly_fields = ("id", "created_at", "updated_at", "promoted_process")
+    readonly_fields = ("id", "created_at", "updated_at", "promoted_skill")
     search_fields = ("title",)
 
 

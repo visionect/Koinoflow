@@ -7,8 +7,8 @@ from apps.usage.enums import ClientType
 
 class UsageEvent(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    process = models.ForeignKey(
-        "processes.Process",
+    skill = models.ForeignKey(
+        "skills.Skill",
         on_delete=models.CASCADE,
         related_name="usage_events",
     )
@@ -22,13 +22,13 @@ class UsageEvent(models.Model):
         db_table = "usage_event"
         ordering = ["-called_at"]
         indexes = [
-            models.Index(fields=["process", "-called_at"]),
+            models.Index(fields=["skill", "-called_at"]),
             models.Index(fields=["called_at"]),
             models.Index(
-                fields=["process", "client_type"],
-                name="idx_usage_process_client_type",
+                fields=["skill", "client_type"],
+                name="idx_usage_skill_client_type",
             ),
         ]
 
     def __str__(self):
-        return f"{self.process.title} called by {self.client_type} at {self.called_at}"
+        return f"{self.skill.title} called by {self.client_type} at {self.called_at}"

@@ -10,7 +10,7 @@ import type {
   ConnectorCredential,
   CreateApiKeyInput,
   CreateDepartmentInput,
-  CreateProcessInput,
+  CreateSkillInput,
   CreateTeamInput,
   CreateVersionInput,
   CreateWorkspaceInput,
@@ -28,22 +28,22 @@ import type {
   Member,
   PaginatedResponse,
   PendingInvitation,
-  Process,
+  Skill,
   ProcessAuditRule,
   StalenessAlertRule,
   CreateStalenessAlertRuleInput,
   UpdateStalenessAlertRuleInput,
-  ProcessDetail,
+  SkillDetail,
   ProcessListFilters,
-  ProcessUsageSummary,
-  ProcessVersion,
-  ProcessVersionBrief,
+  SkillUsageSummary,
+  SkillVersion,
+  SkillVersionBrief,
   PromoteCandidateInput,
   RevertVersionInput,
   Team,
   TeamDetail,
   UpdateDepartmentInput,
-  UpdateProcessInput,
+  UpdateSkillInput,
   UpdateTeamInput,
   UpdateVersionSummaryInput,
   UpsertSettingsInput,
@@ -196,20 +196,20 @@ export const queryKeys = {
     detail: (id: string) => ["departments", "detail", id] as const,
     bySlug: (slug: string) => ["departments", "slug", slug] as const,
   },
-  processes: {
-    all: (filters?: ProcessListFilters) => ["processes", filters ?? {}] as const,
-    detail: (slug: string) => ["processes", "detail", slug] as const,
-    versions: (slug: string) => ["processes", "versions", slug] as const,
+  skills: {
+    all: (filters?: ProcessListFilters) => ["skills", filters ?? {}] as const,
+    detail: (slug: string) => ["skills", "detail", slug] as const,
+    versions: (slug: string) => ["skills", "versions", slug] as const,
     version: (slug: string, versionNumber: number) =>
-      ["processes", "versions", slug, versionNumber] as const,
+      ["skills", "versions", slug, versionNumber] as const,
     versionDiff: (slug: string, versionNumber: number) =>
-      ["processes", "versions", slug, versionNumber, "diff"] as const,
+      ["skills", "versions", slug, versionNumber, "diff"] as const,
     files: (slug: string, versionNumber: number) =>
-      ["processes", "files", slug, versionNumber] as const,
+      ["skills", "files", slug, versionNumber] as const,
     file: (slug: string, versionNumber: number, path: string) =>
-      ["processes", "files", slug, versionNumber, path] as const,
+      ["skills", "files", slug, versionNumber, path] as const,
     fileDiff: (slug: string, versionNumber: number) =>
-      ["processes", "files", slug, versionNumber, "diff"] as const,
+      ["skills", "files", slug, versionNumber, "diff"] as const,
   },
   settings: {
     effective: (teamId?: string, departmentId?: string) =>
@@ -249,7 +249,7 @@ function invalidateWorkspaceStructure(queryClient: ReturnType<typeof useQueryCli
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.teams.all }),
     queryClient.invalidateQueries({ queryKey: ["departments"] }),
-    queryClient.invalidateQueries({ queryKey: ["processes"] }),
+    queryClient.invalidateQueries({ queryKey: ["skills"] }),
   ])
 }
 
@@ -501,9 +501,9 @@ export function useDeleteDepartment() {
   })
 }
 
-export function useProcesses(filters?: ProcessListFilters) {
+export function useSkilles(filters?: ProcessListFilters) {
   return useQuery({
-    queryKey: queryKeys.processes.all(filters),
+    queryKey: queryKeys.skills.all(filters),
     queryFn: () => {
       const query = buildSearchParams({
         department: filters?.department,
@@ -514,51 +514,51 @@ export function useProcesses(filters?: ProcessListFilters) {
         offset: filters?.offset,
       })
 
-      return apiFetch<PaginatedResponse<Process>>(`/processes${query ? `?${query}` : ""}`)
+      return apiFetch<PaginatedResponse<Skill>>(`/skills${query ? `?${query}` : ""}`)
     },
   })
 }
 
-export function useProcess(slug: string) {
+export function useSkill(slug: string) {
   return useQuery({
-    queryKey: queryKeys.processes.detail(slug),
-    queryFn: () => apiFetch<ProcessDetail>(`/processes/${slug}`),
+    queryKey: queryKeys.skills.detail(slug),
+    queryFn: () => apiFetch<SkillDetail>(`/skills/${slug}`),
     enabled: Boolean(slug),
   })
 }
 
-export function useCreateProcess() {
+export function useCreateSkill() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (payload: CreateProcessInput) =>
-      apiFetch<ProcessDetail>("/processes", {
+    mutationFn: (payload: CreateSkillInput) =>
+      apiFetch<SkillDetail>("/skills", {
         method: "POST",
         body: JSON.stringify(payload),
       }),
-    onSuccess: async (process) => {
+    onSuccess: async (skill) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["processes"] }),
+        queryClient.invalidateQueries({ queryKey: ["skills"] }),
         queryClient.invalidateQueries({ queryKey: ["departments"] }),
-        queryClient.setQueryData(queryKeys.processes.detail(process.slug), process),
+        queryClient.setQueryData(queryKeys.skills.detail(skill.slug), skill),
       ])
     },
   })
 }
 
-export function useUpdateProcess(slug: string) {
+export function useUpdateSkill(slug: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (payload: UpdateProcessInput) =>
-      apiFetch<ProcessDetail>(`/processes/${slug}`, {
+    mutationFn: (payload: UpdateSkillInput) =>
+      apiFetch<SkillDetail>(`/skills/${slug}`, {
         method: "PATCH",
         body: JSON.stringify(payload),
       }),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["processes"] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.processes.detail(slug) }),
+        queryClient.invalidateQueries({ queryKey: ["skills"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug) }),
       ])
     },
   })
@@ -569,22 +569,22 @@ export function useUnshareProcessFromMyTeam(slug: string) {
 
   return useMutation({
     mutationFn: () =>
-      apiFetch<ProcessDetail>(`/processes/${slug}/shared-with/my-team`, {
+      apiFetch<SkillDetail>(`/skills/${slug}/shared-with/my-team`, {
         method: "DELETE",
       }),
     onSuccess: async (updated) => {
-      queryClient.setQueryData(queryKeys.processes.detail(slug), updated)
-      await queryClient.invalidateQueries({ queryKey: ["processes"] })
+      queryClient.setQueryData(queryKeys.skills.detail(slug), updated)
+      await queryClient.invalidateQueries({ queryKey: ["skills"] })
     },
   })
 }
 
-export function useDeleteProcess() {
+export function useDeleteSkill() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (slug: string) =>
-      apiFetch<ApiOkResponse>(`/processes/${slug}`, {
+      apiFetch<ApiOkResponse>(`/skills/${slug}`, {
         method: "DELETE",
       }),
     onSuccess: async () => {
@@ -595,10 +595,10 @@ export function useDeleteProcess() {
 
 export function useVersions(slug: string) {
   return useQuery({
-    queryKey: queryKeys.processes.versions(slug),
+    queryKey: queryKeys.skills.versions(slug),
     queryFn: async () => {
-      const res = await apiFetch<{ items: ProcessVersionBrief[]; count: number }>(
-        `/processes/${slug}/versions`,
+      const res = await apiFetch<{ items: SkillVersionBrief[]; count: number }>(
+        `/skills/${slug}/versions`,
       )
       return res.items
     },
@@ -608,34 +608,34 @@ export function useVersions(slug: string) {
 
 export function useVersion(slug: string, versionNumber: number | null) {
   return useQuery({
-    queryKey: queryKeys.processes.version(slug, versionNumber ?? 0),
-    queryFn: () => apiFetch<ProcessVersion>(`/processes/${slug}/versions/${versionNumber}`),
+    queryKey: queryKeys.skills.version(slug, versionNumber ?? 0),
+    queryFn: () => apiFetch<SkillVersion>(`/skills/${slug}/versions/${versionNumber}`),
     enabled: Boolean(slug) && versionNumber !== null,
   })
 }
 
 export function useVersionDiff(slug: string, versionNumber: number | null) {
   return useQuery({
-    queryKey: queryKeys.processes.versionDiff(slug, versionNumber ?? 0),
-    queryFn: () => apiFetch<VersionDiff>(`/processes/${slug}/versions/${versionNumber}/diff`),
+    queryKey: queryKeys.skills.versionDiff(slug, versionNumber ?? 0),
+    queryFn: () => apiFetch<VersionDiff>(`/skills/${slug}/versions/${versionNumber}/diff`),
     enabled: Boolean(slug) && versionNumber !== null && versionNumber > 1,
   })
 }
 
 export function useVersionFiles(slug: string, versionNumber: number | null) {
   return useQuery({
-    queryKey: queryKeys.processes.files(slug, versionNumber ?? 0),
-    queryFn: () => apiFetch<VersionFile[]>(`/processes/${slug}/versions/${versionNumber}/files`),
+    queryKey: queryKeys.skills.files(slug, versionNumber ?? 0),
+    queryFn: () => apiFetch<VersionFile[]>(`/skills/${slug}/versions/${versionNumber}/files`),
     enabled: Boolean(slug) && versionNumber !== null,
   })
 }
 
 export function useVersionFile(slug: string, versionNumber: number | null, path: string | null) {
   return useQuery({
-    queryKey: queryKeys.processes.file(slug, versionNumber ?? 0, path ?? ""),
+    queryKey: queryKeys.skills.file(slug, versionNumber ?? 0, path ?? ""),
     queryFn: () =>
       apiFetch<VersionFileDetail>(
-        `/processes/${slug}/versions/${versionNumber}/files/${encodeURIComponent(path ?? "")}`,
+        `/skills/${slug}/versions/${versionNumber}/files/${encodeURIComponent(path ?? "")}`,
       ),
     enabled: Boolean(slug) && versionNumber !== null && Boolean(path),
   })
@@ -643,13 +643,13 @@ export function useVersionFile(slug: string, versionNumber: number | null, path:
 
 export function useFileDiff(slug: string, versionNumber: number | null) {
   return useQuery({
-    queryKey: queryKeys.processes.fileDiff(slug, versionNumber ?? 0),
+    queryKey: queryKeys.skills.fileDiff(slug, versionNumber ?? 0),
     queryFn: () =>
       apiFetch<{
         old_version_number: number
         new_version_number: number
         entries: FileDiffEntry[]
-      }>(`/processes/${slug}/versions/${versionNumber}/file-diff`),
+      }>(`/skills/${slug}/versions/${versionNumber}/file-diff`),
     enabled: Boolean(slug) && versionNumber !== null && versionNumber > 1,
   })
 }
@@ -659,15 +659,15 @@ export function useCreateVersion(slug: string) {
 
   return useMutation({
     mutationFn: (payload: CreateVersionInput) =>
-      apiFetch<ProcessVersion>(`/processes/${slug}/versions`, {
+      apiFetch<SkillVersion>(`/skills/${slug}/versions`, {
         method: "POST",
         body: JSON.stringify(payload),
       }),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.processes.versions(slug) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.processes.detail(slug) }),
-        queryClient.invalidateQueries({ queryKey: ["processes", "files", slug] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug) }),
+        queryClient.invalidateQueries({ queryKey: ["skills", "files", slug] }),
       ])
     },
   })
@@ -684,15 +684,15 @@ export function useRevertVersion(slug: string) {
       targetVersionNumber: number
       payload: RevertVersionInput
     }) =>
-      apiFetch<ProcessVersion>(`/processes/${slug}/versions/${targetVersionNumber}/revert`, {
+      apiFetch<SkillVersion>(`/skills/${slug}/versions/${targetVersionNumber}/revert`, {
         method: "POST",
         body: JSON.stringify(payload),
       }),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.processes.versions(slug) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.processes.detail(slug) }),
-        queryClient.invalidateQueries({ queryKey: ["processes", "files", slug] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug) }),
+        queryClient.invalidateQueries({ queryKey: ["skills", "files", slug] }),
       ])
     },
   })
@@ -703,49 +703,49 @@ export function useUpdateVersionSummary(slug: string, versionNumber: number | nu
 
   return useMutation({
     mutationFn: (payload: UpdateVersionSummaryInput) =>
-      apiFetch<ProcessVersionBrief>(`/processes/${slug}/versions/${versionNumber}`, {
+      apiFetch<SkillVersionBrief>(`/skills/${slug}/versions/${versionNumber}`, {
         method: "PATCH",
         body: JSON.stringify(payload),
       }),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.processes.versions(slug) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.processes.detail(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug) }),
       ])
     },
   })
 }
 
-export function usePublishProcess(slug: string) {
+export function usePublishSkill(slug: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: () =>
-      apiFetch<ProcessDetail>(`/processes/${slug}/publish`, {
+      apiFetch<SkillDetail>(`/skills/${slug}/publish`, {
         method: "POST",
       }),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["processes"] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.processes.detail(slug) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.processes.versions(slug) }),
+        queryClient.invalidateQueries({ queryKey: ["skills"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug) }),
       ])
     },
   })
 }
 
-export function useReviewProcess(slug: string) {
+export function useReviewSkill(slug: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: () =>
-      apiFetch<ProcessDetail>(`/processes/${slug}/review`, {
+      apiFetch<SkillDetail>(`/skills/${slug}/review`, {
         method: "POST",
       }),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["processes"] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.processes.detail(slug) }),
+        queryClient.invalidateQueries({ queryKey: ["skills"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug) }),
       ])
     },
   })
@@ -971,7 +971,7 @@ export function useUsageEvents(filters?: UsageEventFilters) {
     queryKey: queryKeys.usage.events(filters),
     queryFn: () => {
       const query = buildSearchParams({
-        process: filters?.process,
+        skill: filters?.skill,
         client_type: filters?.client_type,
         days: filters?.days ?? 30,
         limit: filters?.limit,
@@ -987,7 +987,7 @@ export function useUsageSummary(days = 30) {
   return useQuery({
     queryKey: queryKeys.usage.summary(days),
     queryFn: async () => {
-      const res = await apiFetch<{ items: ProcessUsageSummary[]; count: number }>(
+      const res = await apiFetch<{ items: SkillUsageSummary[]; count: number }>(
         `/usage/summary?days=${days}`,
       )
       return res.items
@@ -1115,7 +1115,7 @@ export function usePromoteCandidate() {
       candidateId: string
       payload: PromoteCandidateInput
     }) =>
-      apiFetch<{ process_slug: string }>(
+      apiFetch<{ skill_slug: string }>(
         `/connectors/${credentialId}/candidates/${candidateId}/promote`,
         { method: "POST", body: JSON.stringify(payload) },
       ),
@@ -1124,7 +1124,7 @@ export function usePromoteCandidate() {
         queryClient.invalidateQueries({
           queryKey: queryKeys.connectors.candidates(credentialId),
         }),
-        queryClient.invalidateQueries({ queryKey: ["processes"] }),
+        queryClient.invalidateQueries({ queryKey: ["skills"] }),
       ])
     },
   })

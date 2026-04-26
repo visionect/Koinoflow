@@ -26,18 +26,18 @@ class KoinoflowAPIClient:
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self.token_data.get('_raw_token', '')}"}
 
-    async def get_process(self, slug: str, version: int | None = None) -> dict:
+    async def get_skill(self, slug: str, version: int | None = None) -> dict:
         async with httpx.AsyncClient() as client:
             if version is not None:
-                url = f"{self.base_url}/processes/{slug}/versions/{version}"
+                url = f"{self.base_url}/skills/{slug}/versions/{version}"
             else:
-                url = f"{self.base_url}/processes/{slug}"
+                url = f"{self.base_url}/skills/{slug}"
             response = await client.get(url, headers=self._headers())
             if not response.is_success:
                 raise KoinoflowAPIError(response.status_code, response.text)
             return response.json()
 
-    async def list_processes(
+    async def list_skills(
         self,
         department: str | None = None,
         team: str | None = None,
@@ -54,7 +54,7 @@ class KoinoflowAPIClient:
             if search:
                 params["search"] = search
             response = await client.get(
-                f"{self.base_url}/processes",
+                f"{self.base_url}/skills",
                 headers=self._headers(),
                 params=params,
             )
@@ -62,7 +62,7 @@ class KoinoflowAPIClient:
                 raise KoinoflowAPIError(response.status_code, response.text)
             return response.json()
 
-    async def discover_processes(
+    async def discover_skills(
         self,
         query: str,
         department: str | None = None,
@@ -79,7 +79,7 @@ class KoinoflowAPIClient:
             if team:
                 params["team"] = team
             response = await client.get(
-                f"{self.base_url}/processes/discover",
+                f"{self.base_url}/skills/discover",
                 headers=self._headers(),
                 params=params,
             )
@@ -99,7 +99,7 @@ class KoinoflowAPIClient:
 
     async def log_usage(
         self,
-        process_id: str,
+        skill_id: str,
         version_number: int,
         client_id: str,
         client_type: str,
@@ -111,7 +111,7 @@ class KoinoflowAPIClient:
                     f"{self.base_url}/usage",
                     headers=self._headers(),
                     json={
-                        "process_id": process_id,
+                        "skill_id": skill_id,
                         "version_number": version_number,
                         "client_id": client_id,
                         "client_type": client_type,
@@ -121,27 +121,27 @@ class KoinoflowAPIClient:
         except Exception:
             logger.warning("Failed to log usage event", exc_info=True)
 
-    async def get_process_files(self, slug: str, version: int) -> list[dict]:
+    async def get_skill_files(self, slug: str, version: int) -> list[dict]:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{self.base_url}/processes/{slug}/versions/{version}/files",
+                f"{self.base_url}/skills/{slug}/versions/{version}/files",
                 headers=self._headers(),
             )
             if not response.is_success:
                 raise KoinoflowAPIError(response.status_code, response.text)
             return response.json()
 
-    async def get_process_file(self, slug: str, version: int, path: str) -> dict:
+    async def get_skill_file(self, slug: str, version: int, path: str) -> dict:
         async with httpx.AsyncClient() as client:
             response = await client.get(
-                f"{self.base_url}/processes/{slug}/versions/{version}/files/{path}",
+                f"{self.base_url}/skills/{slug}/versions/{version}/files/{path}",
                 headers=self._headers(),
             )
             if not response.is_success:
                 raise KoinoflowAPIError(response.status_code, response.text)
             return response.json()
 
-    async def create_process_version(
+    async def create_skill_version(
         self,
         slug: str,
         *,
@@ -151,7 +151,7 @@ class KoinoflowAPIClient:
     ) -> dict:
         async with httpx.AsyncClient() as client:
             response = await client.post(
-                f"{self.base_url}/processes/{slug}/versions",
+                f"{self.base_url}/skills/{slug}/versions",
                 headers=self._headers(),
                 json={
                     "content_md": content_md,

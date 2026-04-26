@@ -16,8 +16,8 @@ from apps.orgs.tests.factories import (
     TeamFactory,
     WorkspaceFactory,
 )
-from apps.processes.enums import VisibilityChoices
-from apps.processes.tests.factories import ProcessFactory
+from apps.skills.enums import VisibilityChoices
+from apps.skills.tests.factories import SkillFactory
 
 
 def _get_slug(entity_type, entity_id):
@@ -207,7 +207,7 @@ class TestGetTeam:
         backend = DepartmentFactory(team=team, slug="backend")
         DepartmentFactory(team=team, slug="frontend")
         # Team-wide process owned by backend — should appear in frontend's count too
-        ProcessFactory(department=backend, visibility=VisibilityChoices.TEAM)
+        SkillFactory(department=backend, visibility=VisibilityChoices.TEAM)
 
         resp = auth_client.get("/api/v1/teams/eng")
         assert resp.status_code == 200
@@ -222,7 +222,7 @@ class TestGetTeam:
         team = TeamFactory(workspace=ws, slug="eng")
         backend = DepartmentFactory(team=team, slug="backend")
         DepartmentFactory(team=team, slug="frontend")
-        ProcessFactory(department=backend, visibility=VisibilityChoices.WORKSPACE)
+        SkillFactory(department=backend, visibility=VisibilityChoices.WORKSPACE)
 
         resp = auth_client.get("/api/v1/teams/eng")
         assert resp.status_code == 200
@@ -237,7 +237,7 @@ class TestGetTeam:
         team = TeamFactory(workspace=ws, slug="eng")
         backend = DepartmentFactory(team=team, slug="backend")
         DepartmentFactory(team=team, slug="frontend")
-        ProcessFactory(department=backend, visibility=VisibilityChoices.DEPARTMENT)
+        SkillFactory(department=backend, visibility=VisibilityChoices.DEPARTMENT)
 
         resp = auth_client.get("/api/v1/teams/eng")
         assert resp.status_code == 200
@@ -254,7 +254,7 @@ class TestGetTeam:
         DepartmentFactory(team=team_a, slug="backend")
         dept_b = DepartmentFactory(team=team_b, slug="infra")
         # Team-wide process in team_b should not bleed into team_a
-        ProcessFactory(department=dept_b, visibility=VisibilityChoices.TEAM)
+        SkillFactory(department=dept_b, visibility=VisibilityChoices.TEAM)
 
         resp = auth_client.get("/api/v1/teams/eng")
         assert resp.status_code == 200
@@ -266,7 +266,7 @@ class TestGetTeam:
         team = TeamFactory(workspace=ws, slug="eng")
         backend = DepartmentFactory(team=team, slug="backend")
         frontend = DepartmentFactory(team=team, slug="frontend")
-        process = ProcessFactory(department=backend, visibility=VisibilityChoices.DEPARTMENT)
+        process = SkillFactory(department=backend, visibility=VisibilityChoices.DEPARTMENT)
         process.shared_with.add(frontend)
 
         resp = auth_client.get("/api/v1/teams/eng")
@@ -582,36 +582,36 @@ class TestCoreSettings:
         )
         assert resp.status_code == 400
 
-    def test_upsert_settings_with_process_audit(self, auth_client, admin_membership):
-        from apps.orgs.tests.factories import ProcessAuditRuleFactory
+    def test_upsert_settings_with_skill_audit(self, auth_client, admin_membership):
+        from apps.orgs.tests.factories import SkillAuditRuleFactory
 
         ws = admin_membership.workspace
-        rule = ProcessAuditRuleFactory(workspace=ws, period_days=30)
+        rule = SkillAuditRuleFactory(workspace=ws, period_days=30)
 
         resp = auth_client.patch(
             "/api/v1/settings",
             data={
                 "workspace_id": str(ws.id),
-                "process_audit_id": str(rule.id),
+                "skill_audit_id": str(rule.id),
             },
             content_type="application/json",
         )
         assert resp.status_code == 200
         data = resp.json()
-        assert data["process_audit"]["id"] == str(rule.id)
-        assert data["process_audit"]["period_days"] == 30
+        assert data["skill_audit"]["id"] == str(rule.id)
+        assert data["skill_audit"]["period_days"] == 30
 
-    def test_clear_process_audit_setting(self, auth_client, admin_membership):
-        from apps.orgs.tests.factories import ProcessAuditRuleFactory
+    def test_clear_skill_audit_setting(self, auth_client, admin_membership):
+        from apps.orgs.tests.factories import SkillAuditRuleFactory
 
         ws = admin_membership.workspace
-        rule = ProcessAuditRuleFactory(workspace=ws, period_days=30)
+        rule = SkillAuditRuleFactory(workspace=ws, period_days=30)
 
         auth_client.patch(
             "/api/v1/settings",
             data={
                 "workspace_id": str(ws.id),
-                "process_audit_id": str(rule.id),
+                "skill_audit_id": str(rule.id),
             },
             content_type="application/json",
         )
@@ -620,26 +620,26 @@ class TestCoreSettings:
             "/api/v1/settings",
             data={
                 "workspace_id": str(ws.id),
-                "process_audit_id": "",
+                "skill_audit_id": "",
             },
             content_type="application/json",
         )
         assert resp.status_code == 200
-        assert resp.json()["process_audit"] is None
+        assert resp.json()["skill_audit"] is None
 
-    def test_effective_settings_inherits_process_audit(self, auth_client, admin_membership):
-        from apps.orgs.tests.factories import ProcessAuditRuleFactory
+    def test_effective_settings_inherits_skill_audit(self, auth_client, admin_membership):
+        from apps.orgs.tests.factories import SkillAuditRuleFactory
 
         ws = admin_membership.workspace
         team = TeamFactory(workspace=ws, slug="eng")
         dept = DepartmentFactory(team=team, slug="frontend")
-        rule = ProcessAuditRuleFactory(workspace=ws, period_days=60)
+        rule = SkillAuditRuleFactory(workspace=ws, period_days=60)
 
         auth_client.patch(
             "/api/v1/settings",
             data={
                 "workspace_id": str(ws.id),
-                "process_audit_id": str(rule.id),
+                "skill_audit_id": str(rule.id),
             },
             content_type="application/json",
         )
@@ -647,17 +647,17 @@ class TestCoreSettings:
         resp = auth_client.get(f"/api/v1/settings?team_id={team.id}&department_id={dept.id}")
         assert resp.status_code == 200
         data = resp.json()
-        assert data["process_audit"]["id"] == str(rule.id)
-        assert data["process_audit"]["period_days"] == 60
+        assert data["skill_audit"]["id"] == str(rule.id)
+        assert data["skill_audit"]["period_days"] == 60
 
-    def test_effective_settings_process_audit_none_by_default(
+    def test_effective_settings_skill_audit_none_by_default(
         self,
         auth_client,
         admin_membership,
     ):
         resp = auth_client.get("/api/v1/settings")
         assert resp.status_code == 200
-        assert resp.json()["process_audit"] is None
+        assert resp.json()["skill_audit"] is None
 
     def test_get_settings_includes_require_change_summary(self, auth_client, admin_membership):
         resp = auth_client.get("/api/v1/settings")
@@ -1094,7 +1094,7 @@ class TestStalenessAlertRules:
                 "period_days": 30,
                 "notify_admins": True,
                 "notify_team_managers": False,
-                "notify_process_owner": True,
+                "notify_skill_owner": True,
             },
             content_type="application/json",
         )
@@ -1103,7 +1103,7 @@ class TestStalenessAlertRules:
         assert data["period_days"] == 30
         assert data["notify_admins"] is True
         assert data["notify_team_managers"] is False
-        assert data["notify_process_owner"] is True
+        assert data["notify_skill_owner"] is True
 
     def test_update_rule(self, auth_client, admin_membership):
         from apps.orgs.tests.factories import StalenessAlertRuleFactory
@@ -1187,7 +1187,7 @@ class TestStalenessAlertRules:
                 "period_days": 30,
                 "notify_admins": True,
                 "notify_team_managers": False,
-                "notify_process_owner": False,
+                "notify_skill_owner": False,
             },
             content_type="application/json",
         )

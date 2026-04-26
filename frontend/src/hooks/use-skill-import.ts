@@ -6,7 +6,7 @@ import { parseSkillMd, serializeFrontmatter } from "@/lib/frontmatter"
 import {
   EMPTY_KOINOFLOW_METADATA,
   type KoinoflowMetadata,
-  type ProcessFrontmatter,
+  type SkillFrontmatter,
   type RiskLevel,
   type VersionFileInput,
 } from "@/types"
@@ -16,7 +16,7 @@ export interface SkillImportData {
   description: string
   contentMd: string
   frontmatterYaml: string
-  frontmatter: ProcessFrontmatter
+  frontmatter: SkillFrontmatter
   supportFiles: VersionFileInput[]
   koinoflowMetadata: KoinoflowMetadata
 }
@@ -125,7 +125,7 @@ export function useSkillImport(onImport: (data: SkillImportData) => void) {
     if (!file) return
 
     try {
-      let parsed: { frontmatter: ProcessFrontmatter; content: string }
+      let parsed: { frontmatter: SkillFrontmatter; content: string }
       let supportFiles: VersionFileInput[] = []
 
       let koinoflowMetadata: KoinoflowMetadata = { ...EMPTY_KOINOFLOW_METADATA }

@@ -7,19 +7,19 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import type { ProcessFrontmatter } from "@/types"
+import type { SkillFrontmatter } from "@/types"
 
 type FrontmatterFormProps = {
-  value: ProcessFrontmatter
-  onChange: (value: ProcessFrontmatter) => void
+  value: SkillFrontmatter
+  onChange: (value: SkillFrontmatter) => void
 }
 
 export function FrontmatterForm({ value, onChange }: FrontmatterFormProps) {
   const [tagInput, setTagInput] = React.useState("")
 
-  function updateField<K extends keyof ProcessFrontmatter>(
+  function updateField<K extends keyof SkillFrontmatter>(
     field: K,
-    fieldValue: ProcessFrontmatter[K],
+    fieldValue: SkillFrontmatter[K],
   ) {
     onChange({
       ...value,

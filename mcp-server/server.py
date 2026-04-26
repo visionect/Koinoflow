@@ -50,7 +50,7 @@ else:
 _token_info_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
     "token_info", default=None
 )
-_REQUESTED_SCOPES = "processes:read processes:write usage:write"
+_REQUESTED_SCOPES = "skills:read skills:write usage:write"
 _FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n?(.*)$", re.DOTALL)
 
 
@@ -145,17 +145,17 @@ mcp = FastMCP(
     "Koinoflow",
     instructions=(
         "Koinoflow exposes the organization's approved, versioned operational "
-        "procedures (processes). Tool choice rule: when the user describes a "
-        "task, goal, incident, question, or desired action and no exact process "
-        "slug is known, call discover_processes first. After selecting the best "
-        "candidate, call read_process before giving organization-specific "
-        "guidance or executing steps. Do not use list_processes for task "
+        "skills. Tool choice rule: when the user describes a "
+        "task, goal, incident, question, or desired action and no exact skill "
+        "slug is known, call discover_skills first. After selecting the best "
+        "candidate, call read_skill before giving organization-specific "
+        "guidance or executing steps. Do not use list_skills for task "
         "matching; use it only when the user explicitly asks to browse, list, "
-        "page through, audit, or debug available processes. Each process may "
+        "page through, audit, or debug available skills. Each skill may "
         "include a Koinoflow Context block summarizing risk level, approval "
         "requirements, prerequisites, audience, and retrieval keywords. "
-        "propose_process_update and apply_process_update are available for "
-        "suggesting and publishing new process versions."
+        "propose_skill_update and apply_skill_update are available for "
+        "suggesting and publishing new skill versions."
     ),
     transport_security=transport_security,
     stateless_http=True,
@@ -261,11 +261,11 @@ def _format_discovery_results(data: dict, query: str) -> str:
     items = data.get("items", [])
     if not items:
         status = data.get("embedding_status", "unavailable")
-        return f"No process matches found for `{query}`. (embedding status: {status})"
+        return f"No skill matches found for `{query}`. (embedding status: {status})"
 
     status = data.get("embedding_status", "unavailable")
     lines = [
-        f"Top {len(items)} process matches for `{query}` (embedding status: {status}):",
+        f"Top {len(items)} skill matches for `{query}` (embedding status: {status}):",
         "",
     ]
     for idx, item in enumerate(items, start=1):
@@ -291,7 +291,7 @@ def _format_discovery_results(data: dict, query: str) -> str:
         if snippet:
             lines.append(f"   Snippet: {snippet}")
     lines.append("")
-    lines.append("Call read_process with the best matching slug before executing the process.")
+    lines.append("Call read_skill with the best matching slug before executing the skill.")
     return "\n".join(lines)
 
 
@@ -372,7 +372,7 @@ def _validate_approval_token(
     if int(time.time()) > int(payload.get("exp", 0)):
         return "Approval token expired. Request approval again."
     if payload.get("slug") != slug:
-        return "Approval token does not match the process slug."
+        return "Approval token does not match the skill slug."
     if payload.get("proposed_hash") != _content_hash(proposed_markdown):
         return "Approval token does not match the proposed markdown."
     if payload.get("change_summary_hash") != _content_hash(change_summary):
@@ -406,7 +406,7 @@ def _refinement_suggestions(markdown: str) -> list[str]:
         )
     if not suggestions:
         suggestions.append(
-            "The process is structured. Consider adding measurable success criteria for each"
+            "The skill is structured. Consider adding measurable success criteria for each"
             " outcome."
         )
     return suggestions
@@ -416,9 +416,9 @@ def _refinement_suggestions(markdown: str) -> list[str]:
 
 
 @mcp.tool(
-    annotations=ToolAnnotations(title="Read process", readOnlyHint=True),
+    annotations=ToolAnnotations(title="Read skill", readOnlyHint=True),
 )
-async def read_process(
+async def read_skill(
     slug: str,
     ctx: Context,
     version: int | None = None,
@@ -427,8 +427,8 @@ async def read_process(
     """Load the full approved Koinoflow process for a specific slug.
 
     Use this when a matching process slug is known (directly from the user or
-    from discover_processes/list_processes). For task-based user requests,
-    discover_processes should usually be called before this tool unless the
+    from discover_skills/list_skills). For task-based user requests,
+    discover_skills should usually be called before this tool unless the
     slug is already known. Returns the Markdown process with YAML frontmatter
     and, when present, a Koinoflow Context block summarizing the process's risk
     level, approval requirements, prerequisites, audience, and retrieval
@@ -443,19 +443,19 @@ async def read_process(
     if not client:
         return _NO_AUTH_MSG
     try:
-        data = await client.get_process(slug, version)
+        data = await client.get_skill(slug, version)
     except KoinoflowAPIError as e:
-        return f"Error fetching process: {e}"
+        return f"Error fetching skill: {e}"
 
     version_data = data.get("current_version") or data
 
     asyncio.create_task(
         client.log_usage(
-            process_id=data.get("id", ""),
+            skill_id=data.get("id", ""),
             version_number=version_data.get("version_number", 0),
             client_id=_mcp_client_id(ctx),
             client_type=_mcp_client_type(ctx),
-            tool_name="read_process",
+            tool_name="read_skill",
         )
     )
 
@@ -480,9 +480,9 @@ async def read_process(
 
 
 @mcp.tool(
-    annotations=ToolAnnotations(title="Read process file", readOnlyHint=True),
+    annotations=ToolAnnotations(title="Read skill file", readOnlyHint=True),
 )
-async def read_process_file(
+async def read_skill_file(
     slug: str,
     file_path: str,
     ctx: Context,
@@ -492,7 +492,7 @@ async def read_process_file(
 
     Returns the raw contents of scripts, references, or other support files
     bundled with a process version. Support file paths for a process are
-    listed at the end of the read_process response.
+    listed at the end of the read_skill response.
 
     Args:
         slug: The process slug (e.g., "deploy-to-production")
@@ -505,17 +505,17 @@ async def read_process_file(
 
     if version is None:
         try:
-            data = await client.get_process(slug, None)
+            data = await client.get_skill(slug, None)
             version_data = data.get("current_version") or data
             version = version_data.get("version_number")
         except KoinoflowAPIError as e:
-            return f"Error fetching process: {e}"
+            return f"Error fetching skill: {e}"
 
     if version is None:
         return "Error: could not determine version number"
 
     try:
-        file_data = await client.get_process_file(slug, version, file_path)
+        file_data = await client.get_skill_file(slug, version, file_path)
     except KoinoflowAPIError as e:
         return f"Error fetching file: {e}"
 
@@ -544,9 +544,9 @@ async def read_process_file(
 
 
 @mcp.tool(
-    annotations=ToolAnnotations(title="Discover processes", readOnlyHint=True),
+    annotations=ToolAnnotations(title="Discover skills", readOnlyHint=True),
 )
-async def discover_processes(
+async def discover_skills(
     query: str,
     department: str | None = None,
     team: str | None = None,
@@ -554,10 +554,10 @@ async def discover_processes(
 ) -> str:
     """Find the most relevant Koinoflow processes for a natural-language task.
 
-    Default discovery tool for user intent. Use this before read_process when
+    Default discovery tool for user intent. Use this before read_skill when
     the user describes what they want to do and the exact process slug is
     unknown. Results are ranked with semantic embeddings plus keyword and
-    metadata matches. Do not use list_processes first for task matching.
+    metadata matches. Do not use list_skills first for task matching.
 
     Args:
         query: Natural-language task or question to match against processes
@@ -569,21 +569,21 @@ async def discover_processes(
     if not client:
         return _NO_AUTH_MSG
     try:
-        data = await client.discover_processes(
+        data = await client.discover_skills(
             query=query,
             department=department,
             team=team,
             limit=min(max(limit, 1), 25),
         )
     except KoinoflowAPIError as e:
-        return f"Error discovering processes: {e}"
+        return f"Error discovering skills: {e}"
     return _format_discovery_results(data, query)
 
 
 @mcp.tool(
-    annotations=ToolAnnotations(title="List processes", readOnlyHint=True),
+    annotations=ToolAnnotations(title="List skills", readOnlyHint=True),
 )
-async def list_processes(
+async def list_skills(
     department: str | None = None,
     team: str | None = None,
     search: str | None = None,
@@ -594,11 +594,11 @@ async def list_processes(
 
     Use this only to browse, enumerate, page through, audit, or debug available
     processes. Do not use this for natural-language task matching; call
-    discover_processes instead, then read_process for the selected slug.
+    discover_skills instead, then read_skill for the selected slug.
     Returns each process's title, slug, description, current version number,
     and — when set — risk level, approval requirement, and retrieval
     keywords. Results can be filtered by department and/or team slug. The
-    matching slug can then be passed to read_process to load the full
+    matching slug can then be passed to read_skill to load the full
     approved instructions.
 
     Args:
@@ -612,7 +612,7 @@ async def list_processes(
     if not client:
         return _NO_AUTH_MSG
     try:
-        data = await client.list_processes(
+        data = await client.list_skills(
             department=department,
             team=team,
             search=search,
@@ -620,12 +620,12 @@ async def list_processes(
             offset=offset,
         )
     except KoinoflowAPIError as e:
-        return f"Error listing processes: {e}"
+        return f"Error listing skills: {e}"
 
     items = data.get("items", [])
     total = data.get("count", len(items))
     if not items:
-        return "No processes found."
+        return "No skills found."
 
     lines = []
     for p in items:
@@ -643,16 +643,16 @@ async def list_processes(
             line += f" (keywords: {', '.join(keywords)})"
         lines.append(line)
 
-    header = f"Showing {offset + 1}–{offset + len(items)} of {total} processes"
+    header = f"Showing {offset + 1}–{offset + len(items)} of {total} skills"
     if offset + len(items) < total:
         header += f" (use offset={offset + len(items)} to fetch more)"
     return header + ":\n\n" + "\n".join(lines)
 
 
 @mcp.tool(
-    annotations=ToolAnnotations(title="Propose process update", readOnlyHint=True),
+    annotations=ToolAnnotations(title="Propose skill update", readOnlyHint=True),
 )
-async def propose_process_update(
+async def propose_skill_update(
     slug: str,
     proposed_markdown: str,
     change_summary: str,
@@ -669,7 +669,7 @@ async def propose_process_update(
     returns: the current Markdown, the proposed Markdown, the change summary,
     automated refinement suggestions, and a short-lived HMAC-signed approval
     token. The returned approval token is required as an input to
-    apply_process_update; no change is persisted by this tool.
+    apply_skill_update; no change is persisted by this tool.
     """
     client = _get_client()
     if not client:
@@ -678,17 +678,17 @@ async def propose_process_update(
         settings = await client.get_effective_settings()
     except KoinoflowAPIError:
         settings = {}
-    if settings.get("allow_agent_process_updates") is not True:
+    if settings.get("allow_agent_skill_updates") is not True:
         return (
-            "Agent process updates are not enabled for this workspace. "
-            "An admin must turn on 'Allow agent process updates' in Koinoflow "
-            "Settings before propose_process_update or apply_process_update "
+            "Agent skill updates are not enabled for this workspace. "
+            "An admin must turn on 'Allow agent skill updates' in Koinoflow "
+            "Settings before propose_skill_update or apply_skill_update "
             "can be used."
         )
     try:
-        data = await client.get_process(slug, version)
+        data = await client.get_skill(slug, version)
     except KoinoflowAPIError as e:
-        return f"Error fetching process: {e}"
+        return f"Error fetching skill: {e}"
 
     version_data = data.get("current_version") or data
     current_markdown = _to_raw_markdown(
@@ -703,7 +703,7 @@ async def propose_process_update(
         token_data=token_data,
     )
     response = {
-        "process_slug": slug,
+        "skill_slug": slug,
         "current_markdown": current_markdown,
         "proposed_markdown": proposed_markdown,
         "change_summary": change_summary,
@@ -712,7 +712,7 @@ async def propose_process_update(
         "approval_expires_at_epoch": expires_at,
         "requires_user_approval": True,
         "approval_instruction": (
-            "The apply_process_update tool requires explicit user approval of "
+            "The apply_skill_update tool requires explicit user approval of "
             "these exact changes before it is invoked."
         ),
     }
@@ -721,12 +721,12 @@ async def propose_process_update(
 
 @mcp.tool(
     annotations=ToolAnnotations(
-        title="Apply process update",
+        title="Apply skill update",
         readOnlyHint=False,
         destructiveHint=True,
     ),
 )
-async def apply_process_update(
+async def apply_skill_update(
     slug: str,
     proposed_markdown: str,
     change_summary: str,
@@ -738,15 +738,15 @@ async def apply_process_update(
     Koinoflow Settings and the `processes:write` OAuth scope.
 
     Creates a new process version from the supplied Markdown and change
-    summary. Requires the approval_token returned by propose_process_update
+    summary. Requires the approval_token returned by propose_skill_update
     for the same slug, markdown, and change summary; the token is HMAC-signed
     and short-lived.
     """
     client = _get_client()
     if not client:
         return _NO_AUTH_MSG
-    if not _has_scope("processes:write"):
-        return "Error applying process update: missing required scope `processes:write`."
+    if not _has_scope("skills:write"):
+        return "Error applying process update: missing required scope `skills:write`."
 
     token_data = _token_info_var.get() or {}
     token_error = _validate_approval_token(
@@ -757,22 +757,22 @@ async def apply_process_update(
         token_data=token_data,
     )
     if token_error:
-        return f"Error applying process update: {token_error}"
+        return f"Error applying skill update: {token_error}"
 
     frontmatter_yaml, content_md = _parse_raw_markdown(proposed_markdown)
     try:
-        version_data = await client.create_process_version(
+        version_data = await client.create_skill_version(
             slug,
             content_md=content_md,
             frontmatter_yaml=frontmatter_yaml,
             change_summary=change_summary,
         )
     except KoinoflowAPIError as e:
-        return f"Error applying process update: {e}"
+        return f"Error applying skill update: {e}"
 
     response = {
         "status": "updated",
-        "process_slug": slug,
+        "skill_slug": slug,
         "new_version_id": version_data.get("id"),
         "new_version_number": version_data.get("version_number"),
     }

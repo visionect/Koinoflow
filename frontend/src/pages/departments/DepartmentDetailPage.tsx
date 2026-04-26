@@ -17,11 +17,11 @@ import { toast } from "sonner"
 import {
   useDeleteDepartment,
   useDepartment,
-  useProcesses,
+  useSkilles,
   useUpdateDepartment,
   useWorkspaceMembers,
 } from "@/api/client"
-import { ProcessCreateDialog } from "@/components/processes/ProcessCreateDialog"
+import { SkillCreateDialog } from "@/components/skills/SkillCreateDialog"
 import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { ErrorState } from "@/components/shared/ErrorState"
@@ -68,7 +68,7 @@ export function DepartmentDetailPage() {
   const updateDepartment = useUpdateDepartment(departmentId ?? "")
   const deleteDepartment = useDeleteDepartment()
 
-  const processesQuery = useProcesses(
+  const skillsQuery = useSkills(
     departmentQuery.data
       ? {
           department: departmentQuery.data.slug,
@@ -184,7 +184,7 @@ export function DepartmentDetailPage() {
                 <DropdownMenuTrigger asChild>
                   <Button>
                     <PlusIcon />
-                    New process
+                    New skill
                     <ChevronDownIcon className="ml-1 size-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -221,7 +221,7 @@ export function DepartmentDetailPage() {
         }
       />
 
-      {processesQuery.isLoading || !processesQuery.data ? (
+      {skillsQuery.isLoading || !skillsQuery.data ? (
         <div className="grid gap-4 xl:grid-cols-2">
           {Array.from({ length: 2 }).map((_, index) => (
             <Card key={index}>
@@ -236,31 +236,31 @@ export function DepartmentDetailPage() {
             </Card>
           ))}
         </div>
-      ) : processesQuery.data?.items?.length ? (
+      ) : skillsQuery.data?.items?.length ? (
         <div className="grid gap-4 xl:grid-cols-2">
-          {processesQuery.data.items.map((process) => (
-            <Link key={process.id} to={buildWorkspacePath(workspace, `/processes/${process.slug}`)}>
+          {skillsQuery.data.items.map((skill) => (
+            <Link key={skill.id} to={buildWorkspacePath(workspace, `/skills/${skill.slug}`)}>
               <Card className="h-full transition-all hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
                 <CardHeader className="space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1">
-                      <CardTitle>{process.title}</CardTitle>
+                      <CardTitle>{skill.title}</CardTitle>
                       <CardDescription>
-                        {process.description || "No description yet."}
+                        {skill.description || "No description yet."}
                       </CardDescription>
                     </div>
-                    <StatusBadge status={process.status} />
+                    <StatusBadge status={skill.status} />
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm text-muted-foreground">
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="secondary">
-                      {process.current_version_number
-                        ? `v${process.current_version_number}`
+                      {skill.current_version_number
+                        ? `v${skill.current_version_number}`
                         : "Unpublished"}
                     </Badge>
-                    <Badge variant="outline">Owner: {getDisplayName(process.owner)}</Badge>
-                    {process.visibility === "team" && (
+                    <Badge variant="outline">Owner: {getDisplayName(skill.owner)}</Badge>
+                    {skill.visibility === "team" && (
                       <Badge
                         variant="outline"
                         className="gap-1 text-blue-600 border-blue-300 dark:text-blue-400 dark:border-blue-700"
@@ -269,7 +269,7 @@ export function DepartmentDetailPage() {
                         Team-wide
                       </Badge>
                     )}
-                    {process.visibility === "workspace" && (
+                    {skill.visibility === "workspace" && (
                       <Badge
                         variant="outline"
                         className="gap-1 text-green-600 border-green-300 dark:text-green-400 dark:border-green-700"
@@ -279,18 +279,18 @@ export function DepartmentDetailPage() {
                       </Badge>
                     )}
                   </div>
-                  {process.department_slug !== departmentQuery.data?.slug && (
+                  {skill.department_slug !== departmentQuery.data?.slug && (
                     <p className="text-xs">
                       From:{" "}
                       <span className="font-medium text-foreground">
-                        {process.team_name} / {process.department_name}
+                        {skill.team_name} / {skill.department_name}
                       </span>
                     </p>
                   )}
                   <p>
                     Last validated:{" "}
                     <span className="font-medium text-foreground">
-                      {formatRelativeDate(process.last_reviewed_at, "Not validated yet")}
+                      {formatRelativeDate(skill.last_reviewed_at, "Not validated yet")}
                     </span>
                   </p>
                 </CardContent>
@@ -300,15 +300,15 @@ export function DepartmentDetailPage() {
         </div>
       ) : (
         <EmptyState
-          title="No processes in this department"
-          description="Create the first process to start documenting critical workflows."
+          title="No skills in this department"
+          description="Create the first skill to start documenting critical workflows."
           action={
             isEditor ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button>
                     <PlusIcon />
-                    Create process
+                    Create skill
                     <ChevronDownIcon className="ml-1 size-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -383,14 +383,14 @@ export function DepartmentDetailPage() {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         entityName={departmentQuery.data.name}
-        description="Deleting a department also removes every process and version stored inside it."
+        description="Deleting a department also removes every skill and version stored inside it."
         pending={deleteDepartment.isPending}
         onConfirm={handleDeleteDepartment}
       />
 
       {fileInput}
 
-      <ProcessCreateDialog
+      <SkillCreateDialog
         open={createProcessOpen}
         onOpenChange={setCreateProcessOpen}
         workspaceSlug={workspace}

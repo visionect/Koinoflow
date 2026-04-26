@@ -13,8 +13,8 @@ from apps.accounts.permissions import require_role
 from apps.common.throttles import ReadThrottle, UsageLogThrottle
 from apps.orgs.enums import RoleChoices
 from apps.orgs.models import get_effective_settings
-from apps.processes.enums import StatusChoices
-from apps.processes.models import Process
+from apps.skills.enums import StatusChoices
+from apps.skills.models import Skill
 from apps.usage.enums import ClientType
 from apps.usage.models import UsageEvent
 
@@ -38,8 +38,8 @@ def _oauth_client_name(request) -> str | None:
 
 class UsageEventOut(Schema):
     id: str
-    process_title: str
-    process_slug: str
+    skill_title: str
+    skill_slug: str
     version_number: int
     client_id: str
     client_type: str
@@ -52,9 +52,9 @@ class UsageListOut(Schema):
     count: int
 
 
-class ProcessUsageSummary(Schema):
-    process_slug: str
-    process_title: str
+class SkillUsageSummary(Schema):
+    skill_slug: str
+    skill_title: str
     total_calls: int
     last_called_at: str | None
     unique_clients: int
@@ -62,12 +62,12 @@ class ProcessUsageSummary(Schema):
 
 
 class UsageSummaryListOut(Schema):
-    items: list[ProcessUsageSummary]
+    items: list[SkillUsageSummary]
     count: int
 
 
 class CreateUsageEventIn(Schema):
-    process_id: str
+    skill_id: str
     version_number: int
     client_id: str = "unknown"
     client_type: str = ClientType.UNKNOWN
@@ -84,8 +84,8 @@ class CreateUsageEventIn(Schema):
 def _usage_event_out(event):
     return {
         "id": str(event.id),
-        "process_title": event.process.title,
-        "process_slug": event.process.slug,
+        "skill_title": event.skill.title,
+        "skill_slug": event.skill.slug,
         "version_number": event.version_number,
         "client_id": event.client_id,
         "client_type": event.client_type,
@@ -101,7 +101,7 @@ def _usage_event_out(event):
 @require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER, RoleChoices.MEMBER)
 def list_usage(
     request,
-    process: str | None = None,
+    skill: str | None = None,
     client_type: str | None = None,
     days: int = 30,
     limit: int = 50,
@@ -115,14 +115,14 @@ def list_usage(
 
     qs = (
         UsageEvent.objects.filter(
-            process__department__team__workspace=workspace,
+            skill__department__team__workspace=workspace,
             called_at__gte=since,
         )
-        .select_related("process")
+        .select_related("skill")
         .order_by("-called_at")
     )
-    if process:
-        qs = qs.filter(process__slug=process)
+    if skill:
+        qs = qs.filter(skill__slug=skill)
     if client_type:
         qs = qs.filter(client_type=client_type)
 
@@ -146,7 +146,7 @@ def usage_summary(request, days: int = 30, limit: int = 50, offset: int = 0):
     since = timezone.now() - timedelta(days=days)
 
     processes = (
-        Process.objects.filter(
+        Skill.objects.filter(
             department__team__workspace=workspace,
             usage_events__called_at__gte=since,
         )
@@ -164,20 +164,20 @@ def usage_summary(request, days: int = 30, limit: int = 50, offset: int = 0):
     page_ids = [p.id for p in page]
 
     breakdown_qs = (
-        UsageEvent.objects.filter(process_id__in=page_ids, called_at__gte=since)
-        .values("process_id", "client_type")
+        UsageEvent.objects.filter(skill_id__in=page_ids, called_at__gte=since)
+        .values("skill_id", "client_type")
         .annotate(count=Count("id"))
     )
     breakdown_map = defaultdict(dict)
     for row in breakdown_qs:
-        breakdown_map[row["process_id"]][row["client_type"]] = row["count"]
+        breakdown_map[row["skill_id"]][row["client_type"]] = row["count"]
 
     items = []
     for p in page:
         items.append(
             {
-                "process_slug": p.slug,
-                "process_title": p.title,
+                "skill_slug": p.slug,
+                "skill_title": p.title,
                 "total_calls": p.total_calls,
                 "last_called_at": p.last_called_at.isoformat() if p.last_called_at else None,
                 "unique_clients": p.unique_clients,
@@ -197,8 +197,8 @@ class CoverageOut(Schema):
 
 
 class StaleReliedOnOut(Schema):
-    process_slug: str
-    process_title: str
+    skill_slug: str
+    skill_title: str
     days_since_review: int
     call_count: int
     owner_email: str | None
@@ -226,8 +226,8 @@ class KpiOut(Schema):
 
 
 class CoverageGapOut(Schema):
-    process_slug: str
-    process_title: str
+    skill_slug: str
+    skill_title: str
     owner_first_name: str | None
     days_since_published: int
 
@@ -261,19 +261,19 @@ def usage_analytics(request, days: int = 30):
     since = timezone.now() - timedelta(days=days)
 
     ws_filter = dict(
-        process__department__team__workspace=workspace,
+        skill__department__team__workspace=workspace,
         called_at__gte=since,
     )
 
-    published_count = Process.objects.filter(
+    published_count = Skill.objects.filter(
         department__team__workspace=workspace,
         status=StatusChoices.PUBLISHED,
     ).count()
-    consumed_count = UsageEvent.objects.filter(**ws_filter).values("process_id").distinct().count()
+    consumed_count = UsageEvent.objects.filter(**ws_filter).values("skill_id").distinct().count()
     coverage_pct = (consumed_count / published_count * 100) if published_count else 0.0
 
     stale_processes = (
-        Process.objects.filter(
+        Skill.objects.filter(
             department__team__workspace=workspace,
             status=StatusChoices.PUBLISHED,
             usage_events__called_at__gte=since,
@@ -294,7 +294,7 @@ def usage_analytics(request, days: int = 30):
             effective = get_effective_settings(
                 dept.team.workspace_id, team_id=dept.team_id, department_id=dept.id
             )
-            audit_cache[cache_key] = effective.get("process_audit")
+            audit_cache[cache_key] = effective.get("skill_audit")
         rule = audit_cache[cache_key]
         if rule is None:
             continue
@@ -303,8 +303,8 @@ def usage_analytics(request, days: int = 30):
         days_since = (now - p.last_reviewed_at).days if p.last_reviewed_at else rule.period_days
         stale_items.append(
             {
-                "process_slug": p.slug,
-                "process_title": p.title,
+                "skill_slug": p.slug,
+                "skill_title": p.title,
                 "days_since_review": days_since,
                 "call_count": p.call_count,
                 "owner_email": p.owner.email if p.owner else None,
@@ -345,7 +345,7 @@ def usage_analytics(request, days: int = 30):
     total_calls = sum(r["count"] for r in daily_trend)
     previous_since = since - timedelta(days=days)
     total_calls_previous = UsageEvent.objects.filter(
-        process__department__team__workspace=workspace,
+        skill__department__team__workspace=workspace,
         called_at__gte=previous_since,
         called_at__lt=since,
     ).count()
@@ -369,10 +369,10 @@ def usage_analytics(request, days: int = 30):
 
     # Coverage gap: published processes with zero retrievals in period
     consumed_ids = (
-        UsageEvent.objects.filter(**ws_filter).values_list("process_id", flat=True).distinct()
+        UsageEvent.objects.filter(**ws_filter).values_list("skill_id", flat=True).distinct()
     )
     gap_processes = (
-        Process.objects.filter(
+        Skill.objects.filter(
             department__team__workspace=workspace,
             status=StatusChoices.PUBLISHED,
         )
@@ -382,8 +382,8 @@ def usage_analytics(request, days: int = 30):
     )
     coverage_gap = [
         {
-            "process_slug": p.slug,
-            "process_title": p.title,
+            "skill_slug": p.slug,
+            "skill_title": p.title,
             "owner_first_name": p.owner.first_name if p.owner else None,
             "days_since_published": (now - p.created_at).days,
         }
@@ -425,12 +425,12 @@ def usage_analytics(request, days: int = 30):
 def log_usage_event(request, payload: CreateUsageEventIn):
     workspace = request.workspace
     try:
-        process = Process.objects.get(
-            id=payload.process_id,
+        skill = Skill.objects.get(
+            id=payload.skill_id,
             department__team__workspace=workspace,
         )
-    except Process.DoesNotExist:
-        raise HttpError(404, "Process not found")
+    except Skill.DoesNotExist:
+        raise HttpError(404, "Skill not found")
 
     client_type = payload.client_type
     if client_type == ClientType.MCP:
@@ -439,7 +439,7 @@ def log_usage_event(request, payload: CreateUsageEventIn):
             client_type = resolved
 
     UsageEvent.objects.create(
-        process=process,
+        skill=skill,
         version_number=payload.version_number,
         client_id=payload.client_id,
         client_type=client_type,

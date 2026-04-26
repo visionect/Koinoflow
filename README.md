@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <strong>Version-controlled operational processes for humans and AI agents.</strong>
+  <strong>Version-controlled operational skills for humans and AI agents.</strong>
 </p>
 
 <p align="center">
@@ -22,31 +22,31 @@
 ---
 
 Koinoflow is a B2B platform where an organization writes, versions, and
-governs its operational processes — then exposes that approved knowledge to
+governs its operational skills — then exposes that approved knowledge to
 people through a web app and to AI agents through the [Model Context
 Protocol (MCP)](https://modelcontextprotocol.io). When a developer asks
 their editor "how do we ship a release?" or a support agent asks "what's
 our refund policy?", the answer comes from the latest approved version of
-your process, not a stale wiki page.
+your skill, not a stale wiki page.
 
 > Status: early development. APIs, schemas, and data models may change.
 
 ## Features
 
-- **Process authoring with Tiptap.** A clean Markdown-first editor with
+- **Skill authoring with Tiptap.** A clean Markdown-first editor with
   diffs, revisions, comments, and approval workflows.
 - **Version history as a first-class object.** Every change is an
   immutable version with an author, a commit message, and an optional
   approval gate before it becomes the "current" version.
-- **Organizations → teams → departments → processes.** A workspace model
+- **Organizations → teams → departments → skills.** A workspace model
   that mirrors how real companies organize operational knowledge.
-- **MCP server, remote and local.** Expose processes to any MCP-capable
+- **MCP server, remote and local.** Expose skills to any MCP-capable
   client (Claude Desktop, Cursor, Codex, etc.) over Streamable HTTP
   (hosted) or stdio (local npm package).
 - **OAuth sign-in.** Google and GitHub via `django-allauth`.
-- **Staleness alerts + process audit rules.** Know when a process hasn't
+- **Staleness alerts + skill audit rules.** Know when a skill hasn't
   been reviewed in N days.
-- **Usage analytics.** See which processes are being read, who's reading
+- **Usage analytics.** See which skills are being read, who's reading
   them, and via which MCP client.
 - **Billing-optional.** Ships with `ENABLE_BILLING=False` out of the box
   so self-hosters never see a trial banner or paywall.

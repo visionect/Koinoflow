@@ -1,7 +1,7 @@
 import { BarChart3Icon, BotIcon, Building2Icon, FileTextIcon, KeyRoundIcon } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 
-import { useProcesses, useTeams, useUsageSummary } from "@/api/client"
+import { useSkilles, useTeams, useUsageSummary } from "@/api/client"
 import { PageHeader } from "@/components/shared/PageHeader"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -46,7 +46,7 @@ function DashboardMetric({
 export function DashboardPage() {
   const { workspace } = useParams<{ workspace: string }>()
   const teamsQuery = useTeams()
-  const processesQuery = useProcesses({ limit: 100 })
+  const skillsQuery = useSkills({ limit: 100 })
   const usageSummaryQuery = useUsageSummary(30)
 
   const departmentCount =
@@ -54,7 +54,7 @@ export function DashboardPage() {
   const totalUsageCalls =
     usageSummaryQuery.data?.reduce((total, item) => total + item.total_calls, 0) ?? 0
 
-  const topProcess = usageSummaryQuery.data?.[0]?.process_title
+  const topSkill = usageSummaryQuery.data?.[0]?.skill_title
 
   return (
     <div className="space-y-8">
@@ -70,9 +70,9 @@ export function DashboardPage() {
               </Link>
             </Button>
             <Button asChild>
-              <Link to={buildWorkspacePath(workspace, "/processes")}>
+              <Link to={buildWorkspacePath(workspace, "/skills")}>
                 <FileTextIcon />
-                View processes
+                View skills
               </Link>
             </Button>
           </div>
@@ -93,23 +93,23 @@ export function DashboardPage() {
         />
         <DashboardMetric
           icon={FileTextIcon}
-          label="Processes"
-          value={processesQuery.data?.count ?? "—"}
-          description="Operational processes documented and ready for internal teams or AI clients."
-          isLoading={processesQuery.isLoading}
+          label="Skills"
+          value={skillsQuery.data?.count ?? "—"}
+          description="Operational skills documented and ready for internal teams or AI clients."
+          isLoading={skillsQuery.isLoading}
         />
         <DashboardMetric
           icon={BarChart3Icon}
           label="Usage calls"
           value={usageSummaryQuery.data ? totalUsageCalls : "—"}
-          description="Process retrieval calls in the last 30 days."
+          description="Skill retrieval calls in the last 30 days."
           isLoading={usageSummaryQuery.isLoading}
         />
         <DashboardMetric
           icon={KeyRoundIcon}
-          label="Top process"
-          value={usageSummaryQuery.data ? (topProcess ?? "None yet") : "—"}
-          description="The most frequently consumed process over the current reporting period."
+          label="Top skill"
+          value={usageSummaryQuery.data ? (topSkill ?? "None yet") : "—"}
+          description="The most frequently consumed skill over the current reporting period."
           isLoading={usageSummaryQuery.isLoading}
         />
       </div>
@@ -119,14 +119,14 @@ export function DashboardPage() {
           <CardHeader>
             <CardTitle>Adoption snapshot</CardTitle>
             <CardDescription>
-              The product becomes more valuable as teams document more processes and clients consume
+              The product becomes more valuable as teams document more skills and clients consume
               them consistently.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
               Start by organizing teams and departments, then create operational runbooks under each
-              area. Published processes become immediately available to connected MCP clients.
+              area. Published skills become immediately available to connected MCP clients.
             </p>
             <p>
               API keys and the usage dashboard provide the visibility needed to run Koinoflow in a
@@ -144,7 +144,7 @@ export function DashboardPage() {
               <Link to={buildWorkspacePath(workspace, "/teams")}>Create or refine teams</Link>
             </Button>
             <Button asChild className="w-full justify-start" variant="outline">
-              <Link to={buildWorkspacePath(workspace, "/processes")}>Review all processes</Link>
+              <Link to={buildWorkspacePath(workspace, "/skills")}>Review all skills</Link>
             </Button>
             <Button asChild className="w-full justify-start" variant="outline">
               <Link to={buildWorkspacePath(workspace, "/usage")}>Open analytics</Link>

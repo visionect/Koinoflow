@@ -120,7 +120,7 @@ function CoverageScoreWidget({
       <CardHeader className="pb-2 text-center">
         <CardDescription className="inline-flex items-center justify-center gap-1">
           AI Coverage Score
-          <GlossaryHint text="Share of published processes that have been retrieved at least once by an AI client in the selected period." />
+          <GlossaryHint text="Share of published skills that have been retrieved at least once by an AI client in the selected period." />
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col items-center gap-2 pb-6">
@@ -153,7 +153,7 @@ function CoverageScoreWidget({
           </div>
         )}
         <p className="text-sm text-muted-foreground">
-          {consumed} of {published} published processes consumed
+          {consumed} of {published} published skills consumed
         </p>
       </CardContent>
     </Card>
@@ -168,8 +168,8 @@ function StaleReliedOnWidget({
   workspace,
 }: {
   items: Array<{
-    process_slug: string
-    process_title: string
+    skill_slug: string
+    skill_title: string
     days_since_review: number
     call_count: number
     owner_email: string | null
@@ -187,9 +187,9 @@ function StaleReliedOnWidget({
         <div className="flex-1">
           <CardTitle className="flex items-center gap-2">
             Stale but Relied On
-            <GlossaryHint text="Processes that AI clients retrieve often but haven't been validated recently. Prioritize these for review." />
+            <GlossaryHint text="Skills that AI clients retrieve often but haven't been validated recently. Prioritize these for review." />
           </CardTitle>
-          <CardDescription>High-traffic processes overdue for validation</CardDescription>
+          <CardDescription>High-traffic skills overdue for validation</CardDescription>
         </div>
       </CardHeader>
       <CardContent>
@@ -203,21 +203,21 @@ function StaleReliedOnWidget({
           <div className="flex flex-col items-center gap-2 py-6 text-center">
             <CheckCircle2Icon className="size-8 text-emerald-500" />
             <p className="font-medium text-emerald-700 dark:text-emerald-400">All clear</p>
-            <p className="text-sm text-muted-foreground">No stale high-traffic processes found</p>
+            <p className="text-sm text-muted-foreground">No stale high-traffic skills found</p>
           </div>
         ) : (
           <div className="space-y-3">
             {items.map((item) => (
               <div
-                key={item.process_slug}
+                key={item.skill_slug}
                 className="flex items-center gap-3 rounded-lg border p-3"
               >
                 <div className="min-w-0 flex-1">
                   <Link
-                    to={buildWorkspacePath(workspace, `/processes/${item.process_slug}`)}
+                    to={buildWorkspacePath(workspace, `/skills/${item.skill_slug}`)}
                     className="block truncate font-medium text-foreground hover:text-primary"
                   >
-                    {item.process_title}
+                    {item.skill_title}
                   </Link>
                   {item.owner_first_name && (
                     <span className="text-xs text-muted-foreground">
@@ -261,9 +261,9 @@ function ConsumptionTrendWidget({
         <div className="flex-1">
           <CardTitle className="flex items-center gap-2">
             AI Consumption Trend
-            <GlossaryHint text="Count of process retrievals per day across all AI clients. A retrieval is logged every time a client fetches a process." />
+            <GlossaryHint text="Count of skill retrievals per day across all AI clients. A retrieval is logged every time a client fetches a skill." />
           </CardTitle>
-          <CardDescription>Daily process retrieval volume</CardDescription>
+          <CardDescription>Daily skill retrieval volume</CardDescription>
         </div>
       </CardHeader>
       <CardContent className="h-[260px]">
@@ -409,9 +409,9 @@ function ClientAdoptionWidget({ data, loading }: { data: ClientBreakdown[]; load
   )
 }
 
-// ── Top Consumed Processes Widget ──────────────────────────────────────
+// ── Top Consumed Skills Widget ──────────────────────────────────────
 
-function TopProcessesWidget({
+function TopSkillsWidget({
   data,
   loading,
   workspace,
@@ -425,17 +425,17 @@ function TopProcessesWidget({
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          Top Consumed Processes
-          <GlossaryHint text="Processes with the most AI retrievals in the selected period. Click a bar label to open the process." />
+          Top Consumed Skills
+          <GlossaryHint text="Skills with the most AI retrievals in the selected period. Click a bar label to open the skill." />
         </CardTitle>
-        <CardDescription>Most retrieved processes by AI clients</CardDescription>
+        <CardDescription>Most retrieved skills by AI clients</CardDescription>
       </CardHeader>
       <CardContent className="h-[340px]">
         {loading ? (
           <Skeleton className="h-full w-full" />
         ) : data.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            No process usage yet
+            No skill usage yet
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
@@ -465,13 +465,13 @@ function TopProcessesWidget({
                       tabIndex={0}
                       onClick={() =>
                         item?.slug
-                          ? navigate(buildWorkspacePath(workspace, `/processes/${item.slug}`))
+                          ? navigate(buildWorkspacePath(workspace, `/skills/${item.slug}`))
                           : undefined
                       }
                       onKeyDown={(event) => {
                         if ((event.key === "Enter" || event.key === " ") && item?.slug) {
                           event.preventDefault()
-                          navigate(buildWorkspacePath(workspace, `/processes/${item.slug}`))
+                          navigate(buildWorkspacePath(workspace, `/skills/${item.slug}`))
                         }
                       }}
                     >
@@ -589,10 +589,10 @@ function KpiStripWidget({ kpis, loading }: { kpis: UsageKpis | undefined; loadin
         loading={loading}
       />
       <KpiCard
-        label="Processes touched"
-        value={(kpis?.processes_touched ?? 0).toLocaleString()}
+        label="Skills touched"
+        value={(kpis?.skills_touched ?? 0).toLocaleString()}
         sublabel="Retrieved at least once"
-        hint="Count of distinct processes that have been retrieved in the selected period."
+        hint="Count of distinct skills that have been retrieved in the selected period."
         loading={loading}
       />
       <KpiCard
@@ -622,9 +622,9 @@ function CoverageGapWidget({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           Coverage Gap
-          <GlossaryHint text="Published processes that have not been retrieved by any AI client in the selected period. Candidates for promotion, rewriting, or retirement." />
+          <GlossaryHint text="Published skills that have not been retrieved by any AI client in the selected period. Candidates for promotion, rewriting, or retirement." />
         </CardTitle>
-        <CardDescription>Published processes with zero AI retrievals</CardDescription>
+        <CardDescription>Published skills with zero AI retrievals</CardDescription>
       </CardHeader>
       <CardContent>
         {loading ? (
@@ -638,22 +638,22 @@ function CoverageGapWidget({
             <CheckCircle2Icon className="size-8 text-emerald-500" />
             <p className="font-medium text-emerald-700 dark:text-emerald-400">Full coverage</p>
             <p className="text-sm text-muted-foreground">
-              Every published process has been retrieved at least once
+              Every published skill has been retrieved at least once
             </p>
           </div>
         ) : (
           <div className="space-y-2">
             {items.map((item) => (
               <div
-                key={item.process_slug}
+                key={item.skill_slug}
                 className="flex items-center gap-3 rounded-lg border p-3"
               >
                 <div className="min-w-0 flex-1">
                   <Link
-                    to={buildWorkspacePath(workspace, `/processes/${item.process_slug}`)}
+                    to={buildWorkspacePath(workspace, `/skills/${item.skill_slug}`)}
                     className="block truncate font-medium text-foreground hover:text-primary"
                   >
-                    {item.process_title}
+                    {item.skill_title}
                   </Link>
                   {item.owner_first_name && (
                     <span className="text-xs text-muted-foreground">
@@ -695,9 +695,9 @@ function ToolMixWidget({ data, loading }: { data: ToolBreakdown[]; loading: bool
         <CardTitle className="flex items-center gap-2">
           <WrenchIcon className="size-4 text-muted-foreground" />
           Tool-call Mix
-          <GlossaryHint text="Breakdown of retrievals by the specific tool invoked (e.g. get_process, search_processes). REST means direct HTTP calls without MCP tool routing." />
+          <GlossaryHint text="Breakdown of retrievals by the specific tool invoked (e.g. get_skill, search_skills). REST means direct HTTP calls without MCP tool routing." />
         </CardTitle>
-        <CardDescription>How AI clients reach your processes</CardDescription>
+        <CardDescription>How AI clients reach your skills</CardDescription>
       </CardHeader>
       <CardContent>
         {loading ? (
@@ -752,14 +752,14 @@ const ALL_FILTER = "__all__"
 
 function ActivityLogTab({ period, workspace }: { period: number; workspace: string | undefined }) {
   const [page, setPage] = React.useState(0)
-  const [processFilter, setProcessFilter] = React.useState<string>(ALL_FILTER)
+  const [skillFilter, setSkillFilter] = React.useState<string>(ALL_FILTER)
   const [clientFilter, setClientFilter] = React.useState<string>(ALL_FILTER)
 
   const eventsQuery = useUsageEvents({
     days: period,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
-    process: processFilter !== ALL_FILTER ? processFilter : undefined,
+    skill: skillFilter !== ALL_FILTER ? processFilter : undefined,
     client_type: clientFilter !== ALL_FILTER ? clientFilter : undefined,
   })
 
@@ -773,11 +773,11 @@ function ActivityLogTab({ period, workspace }: { period: number; workspace: stri
   const totalCount = eventsQuery.data?.count ?? 0
   const totalPages = Math.ceil(totalCount / PAGE_SIZE)
 
-  const processSlugs = React.useMemo(() => {
+  const skillSlugs = React.useMemo(() => {
     if (!summaryQuery.data) return []
     return summaryQuery.data.map((s) => ({
-      slug: s.process_slug,
-      title: s.process_title,
+      slug: s.skill_slug,
+      title: s.skill_title,
     }))
   }, [summaryQuery.data])
 
@@ -795,13 +795,13 @@ function ActivityLogTab({ period, workspace }: { period: number; workspace: stri
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-3">
-        <Select value={processFilter} onValueChange={setProcessFilter}>
+        <Select value={skillFilter} onValueChange={setSkillFilter}>
           <SelectTrigger className="w-[220px]">
-            <SelectValue placeholder="All processes" />
+            <SelectValue placeholder="All skills" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ALL_FILTER}>All processes</SelectItem>
-            {processSlugs.map((p) => (
+            <SelectItem value={ALL_FILTER}>All skills</SelectItem>
+            {skillSlugs.map((p) => (
               <SelectItem key={p.slug} value={p.slug}>
                 {p.title}
               </SelectItem>
@@ -828,7 +828,7 @@ function ActivityLogTab({ period, workspace }: { period: number; workspace: stri
             variant="ghost"
             size="sm"
             onClick={() => {
-              setProcessFilter(ALL_FILTER)
+              setSkillFilter(ALL_FILTER)
               setClientFilter(ALL_FILTER)
             }}
           >
@@ -853,7 +853,7 @@ function ActivityLogTab({ period, workspace }: { period: number; workspace: stri
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Process</TableHead>
+                  <TableHead>Skill</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Tool</TableHead>
                   <TableHead>Version</TableHead>
@@ -866,9 +866,9 @@ function ActivityLogTab({ period, workspace }: { period: number; workspace: stri
                     <TableCell>
                       <Link
                         className="font-medium text-foreground hover:text-primary"
-                        to={buildWorkspacePath(workspace, `/processes/${event.process_slug}`)}
+                        to={buildWorkspacePath(workspace, `/skills/${event.skill_slug}`)}
                       >
-                        {event.process_title}
+                        {event.skill_title}
                       </Link>
                     </TableCell>
                     <TableCell>
@@ -951,9 +951,9 @@ export function UsageDashboardPage() {
   }
 
   const analytics = analyticsQuery.data
-  const topProcesses = (summaryQuery.data ?? []).slice(0, 10).map((row) => ({
-    slug: row.process_slug,
-    title: row.process_title,
+  const topSkills = (summaryQuery.data ?? []).slice(0, 10).map((row) => ({
+    slug: row.skill_slug,
+    title: row.skill_title,
     calls: row.total_calls,
   }))
 
@@ -991,11 +991,11 @@ export function UsageDashboardPage() {
           analytics.daily_trend.length === 0 ? (
             <EmptyState
               title="No usage data yet"
-              description="Publish a process and connect an AI client to start collecting analytics."
+              description="Publish a skill and connect an AI client to start collecting analytics."
               action={
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button asChild>
-                    <Link to={buildWorkspacePath(workspace, "/processes")}>Go to processes</Link>
+                    <Link to={buildWorkspacePath(workspace, "/skills")}>Go to skills</Link>
                   </Button>
                   <Button asChild variant="outline">
                     <Link to={buildWorkspacePath(workspace, "/settings/mcp")}>
@@ -1011,7 +1011,7 @@ export function UsageDashboardPage() {
             analytics.daily_trend.every((day) => day.count === 0) ? (
             <EmptyState
               title="No AI traffic yet"
-              description="You have published processes, but no AI client has retrieved them in this period. Connect an MCP client to start measuring adoption."
+              description="You have published skills, but no AI client has retrieved them in this period. Connect an MCP client to start measuring adoption."
               action={
                 <div className="flex flex-wrap justify-center gap-2">
                   <Button asChild>
@@ -1060,8 +1060,8 @@ export function UsageDashboardPage() {
               </div>
 
               <div className="grid gap-4 xl:grid-cols-2">
-                <TopProcessesWidget
-                  data={topProcesses}
+                <TopSkillsWidget
+                  data={topSkills}
                   loading={summaryQuery.isLoading}
                   workspace={workspace}
                 />

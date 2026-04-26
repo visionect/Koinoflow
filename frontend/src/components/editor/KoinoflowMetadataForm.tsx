@@ -119,7 +119,7 @@ export function KoinoflowMetadataForm({
           <div>
             <h2 className="text-lg font-semibold">Koinoflow advanced</h2>
             <p className="text-sm text-muted-foreground">
-              Signals for AI clients (sent over MCP). These help agents find this process and behave
+              Signals for AI clients (sent over MCP). These help agents find this skill and behave
               safely. Not exported to <code>.skill</code> files.
             </p>
           </div>
@@ -193,7 +193,7 @@ export function KoinoflowMetadataForm({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="kf-prereqs">Prerequisites (process slugs)</Label>
+            <Label htmlFor="kf-prereqs">Prerequisites (skill slugs)</Label>
             <TagInput
               id="kf-prereqs"
               placeholder="setup-production-access"
@@ -208,7 +208,7 @@ export function KoinoflowMetadataForm({
               }
             />
             <p className="text-xs text-muted-foreground">
-              AI is told to read these processes before acting on this one.
+              AI is told to read these skills before acting on this one.
             </p>
           </div>
 
@@ -227,7 +227,7 @@ export function KoinoflowMetadataForm({
               }
             />
             <p className="text-xs text-muted-foreground">
-              Helps disambiguate retrieval when multiple processes have similar titles.
+              Helps disambiguate retrieval when multiple skills have similar titles.
             </p>
           </div>
         </CollapsibleContent>

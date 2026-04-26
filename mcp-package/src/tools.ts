@@ -4,7 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
   KoinoflowAPIClient,
   KoinoflowMetadata,
-  ProcessDiscoveryResponse,
+  SkillDiscoveryResponse,
 } from "./api-client.js";
 
 const approvalTokenSecret =
@@ -169,13 +169,13 @@ function buildKoinoflowContextBlock(metadata: KoinoflowMetadata): string {
   return lines.join("\n");
 }
 
-function formatDiscoveryResults(data: ProcessDiscoveryResponse, query: string): string {
+function formatDiscoveryResults(data: SkillDiscoveryResponse, query: string): string {
   if (data.items.length === 0) {
-    return `No process matches found for \`${query}\`. (embedding status: ${data.embedding_status})`;
+    return `No skill matches found for \`${query}\`. (embedding status: ${data.embedding_status})`;
   }
 
   const lines = [
-    `Top ${data.items.length} process matches for \`${query}\` (embedding status: ${data.embedding_status}):`,
+    `Top ${data.items.length} skill matches for \`${query}\` (embedding status: ${data.embedding_status}):`,
     "",
   ];
   data.items.forEach((item, index) => {
@@ -196,7 +196,7 @@ function formatDiscoveryResults(data: ProcessDiscoveryResponse, query: string): 
     }
   });
   lines.push("");
-  lines.push("Call read_process with the best matching slug before executing the process.");
+  lines.push("Call read_skill with the best matching slug before executing the skill.");
   return lines.join("\n");
 }
 
@@ -312,7 +312,7 @@ function validateApprovalToken(
     return "Approval token expired. Request approval again.";
   }
   if (payload.slug !== slug) {
-    return "Approval token does not match the process slug.";
+    return "Approval token does not match the skill slug.";
   }
   if (payload.proposed_hash !== contentHash(proposedMarkdown)) {
     return "Approval token does not match the proposed markdown.";
@@ -329,7 +329,7 @@ function refinementSuggestions(markdown: string): string[] {
   const lowered = content.toLowerCase();
   if (!content.includes("## ")) {
     suggestions.push(
-      "Add section headings so the process is easier to navigate.",
+      "Add section headings so the skill is easier to navigate.",
     );
   }
   if (!/^\s*(?:\d+\.|-)\s+\S+/m.test(content)) {
@@ -367,13 +367,13 @@ export function registerTools(
   client: KoinoflowAPIClient,
 ): void {
   server.tool(
-    "read_process",
-    "Load the full approved Koinoflow instructions for a specific process. Use after discover_processes for task-based requests, after list_processes for browsing results, or immediately if the exact slug is already known.",
+    "read_skill",
+    "Load the full approved Koinoflow instructions for a specific skill. Use after discover_skills for task-based requests, after list_skills for browsing results, or immediately if the exact slug is already known.",
     {
       slug: z
         .string()
         .describe(
-          'Exact process slug to load, for example "deploy-to-production"',
+          'Exact skill slug to load, for example "deploy-to-production"',
         ),
       version: z
         .number()
@@ -391,7 +391,7 @@ export function registerTools(
     },
     async ({ slug, version, include_files }) => {
       try {
-        const data = (await client.getProcess(
+        const data = (await client.getSkill(
           slug,
           version,
         )) as unknown as Record<string, unknown>;
@@ -401,7 +401,7 @@ export function registerTools(
             content: [
               {
                 type: "text" as const,
-                text: "Process has no published version.",
+                text: "Skill has no published version.",
               },
             ],
           };
@@ -440,10 +440,10 @@ export function registerTools(
   );
 
   server.tool(
-    "read_process_file",
-    "Read a support file attached to a Koinoflow process. Text files are returned directly; binary files return JSON containing content_base64, MIME type, size, and path.",
+    "read_skill_file",
+    "Read a support file attached to a Koinoflow skill. Text files are returned directly; binary files return JSON containing content_base64, MIME type, size, and path.",
     {
-      slug: z.string().describe('The process slug, for example "deploy-to-production"'),
+      slug: z.string().describe('The skill slug, for example "deploy-to-production"'),
       file_path: z.string().describe('Path of the support file, for example "images/template.png"'),
       version: z
         .number()
@@ -454,7 +454,7 @@ export function registerTools(
       try {
         let versionNumber = version;
         if (versionNumber === undefined) {
-          const data = (await client.getProcess(slug)) as unknown as Record<
+          const data = (await client.getSkill(slug)) as unknown as Record<
             string,
             unknown
           >;
@@ -473,7 +473,7 @@ export function registerTools(
           };
         }
 
-        const file = await client.getProcessFile(slug, versionNumber, file_path);
+        const file = await client.getSkillFile(slug, versionNumber, file_path);
         if (typeof file.content === "string") {
           const header = `# ${file.path} (${file.file_type}, ${file.mime_type ?? "text/plain"}, ${file.size_bytes} bytes)\n\n`;
           return {
@@ -510,8 +510,8 @@ export function registerTools(
   );
 
   server.tool(
-    "discover_processes",
-    "Default discovery tool for user intent. Use this first when the user describes a task, goal, incident, question, or desired action and the exact process slug is unknown. Then call read_process for the best candidate. Do not call list_processes first for task matching.",
+    "discover_skills",
+    "Default discovery tool for user intent. Use this first when the user describes a task, goal, incident, question, or desired action and the exact skill slug is unknown. Then call read_skill for the best candidate. Do not call list_skills first for task matching.",
     {
       query: z
         .string()
@@ -535,7 +535,7 @@ export function registerTools(
     },
     async ({ query, department, team, limit = 10 }) => {
       try {
-        const data = await client.discoverProcesses(
+        const data = await client.discoverSkills(
           query,
           department,
           team,
@@ -556,22 +556,22 @@ export function registerTools(
   );
 
   server.tool(
-    "list_processes",
-    "Browse, enumerate, page through, audit, or debug available Koinoflow processes. Do not use this for natural-language task matching; use discover_processes first unless the user explicitly asks to list or browse processes.",
+    "list_skills",
+    "Browse, enumerate, page through, audit, or debug available Koinoflow skills. Do not use this for natural-language task matching; use discover_skills first unless the user explicitly asks to list or browse skills.",
     {
       department: z
         .string()
         .optional()
-        .describe("Optional department slug to narrow process discovery"),
+        .describe("Optional department slug to narrow skill discovery"),
       team: z
         .string()
         .optional()
-        .describe("Optional team slug to narrow process discovery"),
+        .describe("Optional team slug to narrow skill discovery"),
       search: z
         .string()
         .optional()
         .describe(
-          "Optional keyword search across process titles and descriptions",
+          "Optional keyword search across skill titles and descriptions",
         ),
       limit: z
         .number()
@@ -591,7 +591,7 @@ export function registerTools(
     },
     async ({ department, team, search, limit = 100, offset = 0 }) => {
       try {
-        const data = await client.listProcesses(
+        const data = await client.listSkills(
           department,
           team,
           search,
@@ -600,7 +600,7 @@ export function registerTools(
         );
         if (data.items.length === 0) {
           return {
-            content: [{ type: "text" as const, text: "No processes found." }],
+            content: [{ type: "text" as const, text: "No skills found." }],
           };
         }
 
@@ -619,7 +619,7 @@ export function registerTools(
 
         const end = offset + data.items.length;
         const total = data.count;
-        let header = `Showing ${offset + 1}–${end} of ${total} processes`;
+        let header = `Showing ${offset + 1}–${end} of ${total} skills`;
         if (end < total) header += ` (use offset=${end} to fetch more)`;
         const text = `${header}:\n\n${lines.join("\n")}`;
         return { content: [{ type: "text" as const, text }] };
@@ -633,12 +633,12 @@ export function registerTools(
   );
 
   server.tool(
-    "propose_process_update",
-    "Preview a proposed update to a Koinoflow process without publishing it. Requires the 'Allow agent process updates' setting to be enabled in Koinoflow Settings. Use when you have made changes to a standard process and want to evolve it — returns current and proposed markdown, refinement suggestions, and a short-lived approval token required by apply_process_update. No change is persisted by this tool.",
+    "propose_skill_update",
+    "Preview a proposed update to a Koinoflow skill without publishing it. Requires the 'Allow agent skill updates' setting to be enabled in Koinoflow Settings. Use when you have made changes to a skill and want to evolve it — returns current and proposed markdown, refinement suggestions, and a short-lived approval token required by apply_skill_update. No change is persisted by this tool.",
     {
       slug: z
         .string()
-        .describe('The process slug (e.g., "deploy-to-production")'),
+        .describe('The skill slug (e.g., "deploy-to-production")'),
       proposed_markdown: z
         .string()
         .min(1)
@@ -656,7 +656,7 @@ export function registerTools(
     },
     async ({ slug, proposed_markdown, change_summary, version }) => {
       try {
-        const data = (await client.getProcess(
+        const data = (await client.getSkill(
           slug,
           version,
         )) as unknown as Record<string, unknown>;
@@ -666,7 +666,7 @@ export function registerTools(
             content: [
               {
                 type: "text" as const,
-                text: "Process has no available version to refine.",
+                text: "Skill has no available version to refine.",
               },
             ],
             isError: true,
@@ -679,7 +679,7 @@ export function registerTools(
           change_summary,
         );
         const payload = {
-          process_slug: slug,
+          skill_slug: slug,
           current_markdown: toRawMarkdown(ver.frontmatter_yaml, ver.content_md),
           proposed_markdown,
           change_summary,
@@ -688,7 +688,7 @@ export function registerTools(
           approval_expires_at_epoch: expiresAtEpoch,
           requires_user_approval: true,
           approval_instruction:
-            "Ask the user to approve these exact changes before calling apply_process_update.",
+            "Ask the user to approve these exact changes before calling apply_skill_update.",
         };
 
         return {
@@ -709,12 +709,12 @@ export function registerTools(
   );
 
   server.tool(
-    "apply_process_update",
-    "Publish a new version of a Koinoflow process. Requires the 'Allow agent process updates' setting to be enabled in Koinoflow Settings. Call only after the user has reviewed and approved the output of propose_process_update. Creates a new draft process version from the approved markdown and change summary.",
+    "apply_skill_update",
+    "Publish a new version of a Koinoflow skill. Requires the 'Allow agent skill updates' setting to be enabled in Koinoflow Settings. Call only after the user has reviewed and approved the output of propose_skill_update. Creates a new draft skill version from the approved markdown and change summary.",
     {
       slug: z
         .string()
-        .describe('The process slug (e.g., "deploy-to-production")'),
+        .describe('The skill slug (e.g., "deploy-to-production")'),
       proposed_markdown: z
         .string()
         .min(1)
@@ -722,11 +722,11 @@ export function registerTools(
       change_summary: z
         .string()
         .min(1)
-        .describe("Change summary for the new process version."),
+        .describe("Change summary for the new skill version."),
       approval_token: z
         .string()
         .min(1)
-        .describe("Approval token returned by propose_process_update."),
+        .describe("Approval token returned by propose_skill_update."),
     },
     async ({ slug, proposed_markdown, change_summary, approval_token }) => {
       try {
@@ -744,7 +744,7 @@ export function registerTools(
         }
 
         const parsed = parseRawMarkdown(proposed_markdown);
-        const version = await client.createProcessVersion(slug, {
+        const version = await client.createSkillVersion(slug, {
           content_md: parsed.content_md,
           frontmatter_yaml: parsed.frontmatter_yaml,
           change_summary,
@@ -756,7 +756,7 @@ export function registerTools(
               text: JSON.stringify(
                 {
                   status: "updated",
-                  process_slug: slug,
+                  skill_slug: slug,
                   new_version_id: version.id ?? null,
                   new_version_number: version.version_number,
                 },
