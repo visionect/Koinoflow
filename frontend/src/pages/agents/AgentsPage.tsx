@@ -56,9 +56,11 @@ function slugify(value: string) {
 function TokenReveal({ agent }: { agent: CreatedAgent | null }) {
   if (!agent) return null
 
+  const token = agent.token
+
   async function copyToken() {
     try {
-      await navigator.clipboard.writeText(agent.token)
+      await navigator.clipboard.writeText(token)
       toast.success("Agent token copied")
     } catch {
       toast.error("Clipboard access was blocked")
@@ -69,7 +71,7 @@ function TokenReveal({ agent }: { agent: CreatedAgent | null }) {
     <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
       <p className="font-medium">Save this token now. It will not be shown again.</p>
       <div className="mt-2 flex items-center gap-2 rounded-md bg-background p-2 font-mono text-xs text-foreground">
-        <code className="min-w-0 flex-1 break-all">{agent.token}</code>
+        <code className="min-w-0 flex-1 break-all">{token}</code>
         <Button size="sm" variant="outline" onClick={() => void copyToken()}>
           <CopyIcon aria-hidden />
           Copy
@@ -425,7 +427,7 @@ export function AgentsPage() {
           ) : (
             <EmptyState
               title="No agents yet"
-              message="Create an agent to generate its one-time connection token."
+              description="Create an agent to generate its one-time connection token."
               action={
                 <Button onClick={() => setCreateOpen(true)}>
                   <KeyRoundIcon aria-hidden />
@@ -472,7 +474,7 @@ export function AgentsPage() {
           ) : (
             <EmptyState
               title="No agent skills"
-              message="Import a .skill file and choose which agents receive it."
+              description="Import a .skill file and choose which agents receive it."
             />
           )}
         </CardContent>
@@ -508,7 +510,7 @@ export function AgentsPage() {
               </Table>
             </div>
           ) : (
-            <EmptyState title="No agent usage yet" message="Agent MCP calls will appear here." />
+            <EmptyState title="No agent usage yet" description="Agent MCP calls will appear here." />
           )}
         </CardContent>
       </Card>
