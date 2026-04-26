@@ -13,6 +13,7 @@ import {
 import { Link, useParams, useSearchParams } from "react-router-dom"
 
 import { useDepartments, useProcesses, useTeams } from "@/api/client"
+import { DiscoveryEmbeddingStatusBadge } from "@/components/processes/DiscoveryEmbeddingStatusBadge"
 import { ProcessCreateDialog } from "@/components/processes/ProcessCreateDialog"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { ErrorState } from "@/components/shared/ErrorState"
@@ -210,11 +211,12 @@ export function ProcessListPage() {
           <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[40%]">Title</TableHead>
-                <TableHead className="w-[22%]">Team / Department</TableHead>
-                <TableHead className="w-[13%]">Status</TableHead>
-                <TableHead className="w-[13%]">Review</TableHead>
-                <TableHead className="w-[12%]">Version</TableHead>
+                <TableHead className="w-[34%]">Title</TableHead>
+                <TableHead className="w-[20%]">Team / Department</TableHead>
+                <TableHead className="w-[12%]">Status</TableHead>
+                <TableHead className="w-[12%]">Review</TableHead>
+                <TableHead className="w-[13%]">Discovery</TableHead>
+                <TableHead className="w-[9%]">Version</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -234,6 +236,9 @@ export function ProcessListPage() {
                     <Skeleton className="h-5 w-20" />
                   </TableCell>
                   <TableCell>
+                    <Skeleton className="h-5 w-24" />
+                  </TableCell>
+                  <TableCell>
                     <Skeleton className="h-4 w-10" />
                   </TableCell>
                 </TableRow>
@@ -247,11 +252,12 @@ export function ProcessListPage() {
             <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[40%]">Title</TableHead>
-                  <TableHead className="w-[22%]">Team / Department</TableHead>
-                  <TableHead className="w-[13%]">Status</TableHead>
-                  <TableHead className="w-[13%]">Review</TableHead>
-                  <TableHead className="w-[12%]">Version</TableHead>
+                  <TableHead className="w-[34%]">Title</TableHead>
+                  <TableHead className="w-[20%]">Team / Department</TableHead>
+                  <TableHead className="w-[12%]">Status</TableHead>
+                  <TableHead className="w-[12%]">Review</TableHead>
+                  <TableHead className="w-[13%]">Discovery</TableHead>
+                  <TableHead className="w-[9%]">Version</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -307,6 +313,12 @@ export function ProcessListPage() {
                         ) : (
                           <span className="text-xs text-muted-foreground">&mdash;</span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <DiscoveryEmbeddingStatusBadge
+                          status={process.discovery_embedding_status}
+                          compact
+                        />
                       </TableCell>
                       <TableCell className="truncate text-sm text-muted-foreground">
                         {process.current_version_number

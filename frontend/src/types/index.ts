@@ -1,6 +1,7 @@
 export type WorkspaceRole = "admin" | "team_manager" | "member"
 export type ProcessStatus = "draft" | "published"
 export type ProcessVisibility = "department" | "team" | "workspace"
+export type DiscoveryEmbeddingStatus = "not_applicable" | "pending" | "ready"
 export type ThemeMode = "light" | "dark" | "system"
 
 export interface User {
@@ -201,6 +202,7 @@ export interface Process {
   risk_level: RiskLevel | null
   retrieval_keywords: string[]
   requires_human_approval: boolean
+  discovery_embedding_status: DiscoveryEmbeddingStatus
   created_at: string
   updated_at: string
 }
@@ -222,6 +224,7 @@ export interface ProcessDetail {
   current_version: ProcessVersion | null
   last_reviewed_at: string | null
   needs_audit: boolean
+  discovery_embedding_status: DiscoveryEmbeddingStatus
   created_at: string
   updated_at: string
 }

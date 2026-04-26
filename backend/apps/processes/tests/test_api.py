@@ -76,6 +76,21 @@ class TestGetProcess:
         assert resp.status_code == 200
         data = resp.json()
         assert data["current_version"]["content_md"] == "# Deploy"
+        assert data["discovery_embedding_status"] == "pending"
+
+        ProcessDiscoveryEmbedding.objects.create(
+            version=version,
+            embedding=[0.0] * 768,
+            embedding_model="gemini-embedding-2",
+            embedding_dimensions=768,
+            content_hash="a" * 64,
+            indexed_text="# Deploy",
+            indexed_at=timezone.now(),
+        )
+
+        resp = auth_client.get("/api/v1/processes/deploy")
+        assert resp.status_code == 200
+        assert resp.json()["discovery_embedding_status"] == "ready"
 
     def test_get_process_draft_via_session(self, auth_client, admin_membership):
         ws = admin_membership.workspace
@@ -510,6 +525,42 @@ class TestListProcesses:
         data = resp.json()
         assert data["count"] == 1
         assert data["items"][0]["slug"] == "published"
+
+    def test_list_processes_embedding_statuses(self, auth_client, admin_membership):
+        ws = admin_membership.workspace
+        team = TeamFactory(workspace=ws, slug="eng")
+        dept = DepartmentFactory(team=team, slug="frontend")
+        draft = ProcessFactory(department=dept, slug="draft", status=StatusChoices.DRAFT)
+        published = ProcessFactory(
+            department=dept,
+            slug="published",
+            status=StatusChoices.PUBLISHED,
+        )
+        ready = ProcessFactory(department=dept, slug="ready", status=StatusChoices.PUBLISHED)
+        published_version = ProcessVersionFactory(process=published, version_number=1)
+        ready_version = ProcessVersionFactory(process=ready, version_number=1)
+        published.current_version = published_version
+        published.save(update_fields=["current_version"])
+        ready.current_version = ready_version
+        ready.save(update_fields=["current_version"])
+        ProcessDiscoveryEmbedding.objects.create(
+            version=ready_version,
+            embedding=[0.0] * 768,
+            embedding_model="gemini-embedding-2",
+            embedding_dimensions=768,
+            content_hash="a" * 64,
+            indexed_text="Ready",
+            indexed_at=timezone.now(),
+        )
+
+        resp = auth_client.get("/api/v1/processes")
+        assert resp.status_code == 200
+        statuses = {
+            item["slug"]: item["discovery_embedding_status"] for item in resp.json()["items"]
+        }
+        assert statuses[draft.slug] == "not_applicable"
+        assert statuses[published.slug] == "pending"
+        assert statuses[ready.slug] == "ready"
 
 
 @pytest.mark.django_db

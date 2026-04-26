@@ -12,6 +12,7 @@ from datetime import timedelta
 from typing import Literal
 
 import yaml
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
 from django.http import HttpResponse
 from django.utils import timezone
@@ -57,6 +58,8 @@ from apps.processes.models import Process, ProcessVersion, VersionFile
 logger = logging.getLogger(__name__)
 
 router = Router(tags=["processes"])
+
+DiscoveryEmbeddingStatus = Literal["not_applicable", "pending", "ready"]
 
 VERSION_FILE_TYPE_PATTERN = (
     r"^(python|markdown|html|yaml|json|javascript|typescript|shell|image|pdf|binary|text|other)$"
@@ -232,6 +235,7 @@ class ProcessOut(Schema):
     risk_level: RiskLevel | None
     retrieval_keywords: list[str]
     requires_human_approval: bool
+    discovery_embedding_status: DiscoveryEmbeddingStatus
     created_at: str
     updated_at: str
 
@@ -253,6 +257,7 @@ class ProcessDetailOut(Schema):
     current_version: ProcessVersionOut | None
     last_reviewed_at: str | None
     needs_audit: bool
+    discovery_embedding_status: DiscoveryEmbeddingStatus
     created_at: str
     updated_at: str
 
@@ -637,6 +642,21 @@ def _compute_needs_audit(process, audit_settings_cache=None):
     return process.last_reviewed_at < cutoff
 
 
+def _discovery_embedding_status(process) -> DiscoveryEmbeddingStatus:
+    if (
+        process.status != StatusChoices.PUBLISHED
+        or not process.current_version_id
+        or not process.current_version
+    ):
+        return "not_applicable"
+
+    try:
+        process.current_version.discovery_embedding
+    except ObjectDoesNotExist:
+        return "pending"
+    return "ready"
+
+
 def _get_slug(entity_type, entity_id):
     from apps.orgs.models import CoreSlug
 
@@ -681,6 +701,7 @@ def _process_out(p, audit_cache=None, shared_cache=None):
         "risk_level": cv_metadata["risk_level"],
         "retrieval_keywords": cv_metadata["retrieval_keywords"],
         "requires_human_approval": cv_metadata["requires_human_approval"],
+        "discovery_embedding_status": _discovery_embedding_status(p),
         "created_at": p.created_at.isoformat(),
         "updated_at": p.updated_at.isoformat(),
     }
@@ -719,6 +740,7 @@ def _process_detail_out(p, requester_team_id=None):
         "current_version": cv,
         "last_reviewed_at": p.last_reviewed_at.isoformat() if p.last_reviewed_at else None,
         "needs_audit": _compute_needs_audit(p),
+        "discovery_embedding_status": _discovery_embedding_status(p),
         "created_at": p.created_at.isoformat(),
         "updated_at": p.updated_at.isoformat(),
     }
@@ -752,6 +774,7 @@ def _get_process(request, slug: str, *, allow_draft=True):
             "department__team",
             "owner",
             "current_version__authored_by",
+            "current_version__discovery_embedding",
             "current_version__reverted_from",
         ).get(slug=slug, department__team__workspace=workspace)
     except Process.DoesNotExist:
@@ -771,7 +794,7 @@ def _base_process_queryset(request):
 
     qs = (
         Process.objects.filter(department__team__workspace=workspace)
-        .select_related("department__team", "owner", "current_version")
+        .select_related("department__team", "owner", "current_version__discovery_embedding")
         .order_by("-updated_at")
     )
 
