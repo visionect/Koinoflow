@@ -236,6 +236,7 @@ export const queryKeys = {
   agents: {
     all: ["agents"] as const,
     skills: ["agents", "skills"] as const,
+    deployment: (slug: string) => ["agents", "skills", slug, "deployment"] as const,
     usage: (days: number) => ["agents", "usage", days] as const,
     analytics: (days: number) => ["agents", "analytics", days] as const,
   },
@@ -1018,6 +1019,31 @@ export function useImportAgentSkill() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.agents.skills }),
         queryClient.invalidateQueries({ queryKey: queryKeys.agents.analytics(30) }),
+      ])
+    },
+  })
+}
+
+export function useAgentSkillDeployment(slug: string | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.agents.deployment(slug ?? ""),
+    enabled: Boolean(slug),
+    queryFn: () => apiFetch<AgentSkill>(`/agents/skills/${slug}/deployment`),
+  })
+}
+
+export function useUpdateAgentSkillDeployment(slug: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { deploy_to_all: boolean; agent_ids: string[] }) =>
+      apiFetch<AgentSkill>(`/agents/skills/${slug}/deployment`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.skills }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.deployment(slug) }),
       ])
     },
   })

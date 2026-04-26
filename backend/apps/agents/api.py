@@ -14,9 +14,7 @@ from apps.orgs.enums import EntityType, RoleChoices
 from apps.orgs.models import (
     SYSTEM_KIND_AGENTS,
     Department,
-    FeatureFlag,
     Team,
-    WorkspaceFeatureFlag,
     create_slug,
     unique_slug,
 )
@@ -81,6 +79,11 @@ class ImportAgentSkillIn(Schema):
     agent_ids: list[str] = []
 
 
+class UpdateAgentSkillDeploymentIn(Schema):
+    deploy_to_all: bool = True
+    agent_ids: list[str] = []
+
+
 class AgentSkillOut(Schema):
     id: str
     title: str
@@ -123,15 +126,9 @@ class AgentAnalyticsOut(Schema):
     by_skill: list[dict]
 
 
-def _require_agents_feature(workspace):
+def _require_workspace(workspace):
     if not workspace:
         raise HttpError(403, "No workspace context")
-    enabled = WorkspaceFeatureFlag.objects.filter(
-        workspace=workspace,
-        flag__name="agents",
-    ).exists()
-    if not enabled:
-        raise HttpError(404, "Agents feature is not enabled for this workspace.")
 
 
 def _agent_out(agent: Agent):
@@ -145,10 +142,6 @@ def _agent_out(agent: Agent):
         "last_used_at": agent.last_used_at.isoformat() if agent.last_used_at else None,
         "created_at": agent.created_at.isoformat(),
     }
-
-
-def _ensure_agents_feature_flag():
-    FeatureFlag.objects.get_or_create(name="agents")
 
 
 def _ensure_agents_department(workspace):
@@ -215,7 +208,7 @@ def _agent_usage_out(event: UsageEvent):
 @router.get("/agents", response=AgentListOut, auth=api_or_session, throttle=[ReadThrottle()])
 @require_role(RoleChoices.ADMIN)
 def list_agents(request, limit: int = 50, offset: int = 0):
-    _require_agents_feature(request.workspace)
+    _require_workspace(request.workspace)
     limit = min(max(limit, 1), 200)
     offset = max(offset, 0)
     qs = Agent.objects.filter(workspace=request.workspace).order_by("name")
@@ -231,8 +224,7 @@ def list_agents(request, limit: int = 50, offset: int = 0):
 )
 @require_role(RoleChoices.ADMIN)
 def create_agent(request, payload: CreateAgentIn):
-    _ensure_agents_feature_flag()
-    _require_agents_feature(request.workspace)
+    _require_workspace(request.workspace)
     raw_token, token_hash, token_prefix = Agent.generate_token()
     agent = Agent.objects.create(
         workspace=request.workspace,
@@ -254,7 +246,7 @@ def create_agent(request, payload: CreateAgentIn):
 )
 @require_role(RoleChoices.ADMIN)
 def update_agent(request, agent_id: str, payload: UpdateAgentIn):
-    _require_agents_feature(request.workspace)
+    _require_workspace(request.workspace)
     try:
         agent = Agent.objects.get(id=agent_id, workspace=request.workspace)
     except Agent.DoesNotExist:
@@ -282,7 +274,7 @@ def update_agent(request, agent_id: str, payload: UpdateAgentIn):
 )
 @require_role(RoleChoices.ADMIN)
 def rotate_agent_token(request, agent_id: str):
-    _require_agents_feature(request.workspace)
+    _require_workspace(request.workspace)
     try:
         agent = Agent.objects.get(id=agent_id, workspace=request.workspace)
     except Agent.DoesNotExist:
@@ -304,7 +296,7 @@ def rotate_agent_token(request, agent_id: str):
 )
 @require_role(RoleChoices.ADMIN)
 def list_agent_skills(request, limit: int = 50, offset: int = 0):
-    _require_agents_feature(request.workspace)
+    _require_workspace(request.workspace)
     limit = min(max(limit, 1), 200)
     offset = max(offset, 0)
     qs = (
@@ -330,7 +322,7 @@ def list_agent_skills(request, limit: int = 50, offset: int = 0):
 )
 @require_role(RoleChoices.ADMIN)
 def import_agent_skill(request, payload: ImportAgentSkillIn):
-    _require_agents_feature(request.workspace)
+    _require_workspace(request.workspace)
     if not payload.deploy_to_all and not payload.agent_ids:
         raise HttpError(400, "Select at least one agent or deploy to all agents.")
 
@@ -391,6 +383,70 @@ def import_agent_skill(request, payload: ImportAgentSkillIn):
 
 
 @router.get(
+    "/agents/skills/{slug}/deployment",
+    response=AgentSkillOut,
+    auth=api_or_session,
+    throttle=[ReadThrottle()],
+)
+@require_role(RoleChoices.ADMIN)
+def get_agent_skill_deployment(request, slug: str):
+    try:
+        skill = Skill.objects.prefetch_related("agent_deployments").get(
+            slug=slug,
+            department__team__workspace=request.workspace,
+            department__system_kind=SYSTEM_KIND_AGENTS,
+        )
+    except Skill.DoesNotExist:
+        raise HttpError(404, "Agent skill not found")
+    return _agent_skill_out(skill)
+
+
+@router.put(
+    "/agents/skills/{slug}/deployment",
+    response=AgentSkillOut,
+    auth=api_or_session,
+    throttle=[MutationThrottle()],
+)
+@require_role(RoleChoices.ADMIN)
+def update_agent_skill_deployment(request, slug: str, payload: UpdateAgentSkillDeploymentIn):
+    try:
+        skill = Skill.objects.get(
+            slug=slug,
+            department__team__workspace=request.workspace,
+            department__system_kind=SYSTEM_KIND_AGENTS,
+        )
+    except Skill.DoesNotExist:
+        raise HttpError(404, "Agent skill not found")
+
+    if not payload.deploy_to_all and not payload.agent_ids:
+        raise HttpError(400, "Select at least one agent or deploy to all agents.")
+
+    agents = []
+    if not payload.deploy_to_all and payload.agent_ids:
+        agents = list(
+            Agent.objects.filter(
+                id__in=payload.agent_ids,
+                workspace=request.workspace,
+                is_active=True,
+            )
+        )
+        if len(agents) != len(set(payload.agent_ids)):
+            raise HttpError(400, "One or more agent IDs are invalid")
+
+    with transaction.atomic():
+        skill.agent_deployments.all().delete()
+        if payload.deploy_to_all:
+            AgentSkillDeployment.objects.create(skill=skill, deploy_to_all=True)
+        else:
+            AgentSkillDeployment.objects.bulk_create(
+                [AgentSkillDeployment(skill=skill, agent=agent) for agent in agents]
+            )
+
+    skill = Skill.objects.prefetch_related("agent_deployments").get(id=skill.id)
+    return _agent_skill_out(skill)
+
+
+@router.get(
     "/agents/usage",
     response=AgentUsageListOut,
     auth=api_or_session,
@@ -404,7 +460,7 @@ def list_agent_usage(
     limit: int = 50,
     offset: int = 0,
 ):
-    _require_agents_feature(request.workspace)
+    _require_workspace(request.workspace)
     days = max(1, min(days, 365))
     limit = min(max(limit, 1), 500)
     offset = max(offset, 0)
@@ -432,7 +488,7 @@ def list_agent_usage(
 )
 @require_role(RoleChoices.ADMIN)
 def agent_analytics(request, days: int = 30):
-    _require_agents_feature(request.workspace)
+    _require_workspace(request.workspace)
     days = max(1, min(days, 365))
     since = timezone.now() - timedelta(days=days)
     qs = UsageEvent.objects.filter(

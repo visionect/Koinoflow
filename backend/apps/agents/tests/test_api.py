@@ -4,27 +4,14 @@ from apps.agents.models import Agent
 from apps.orgs.models import (
     SYSTEM_KIND_AGENTS,
     Department,
-    FeatureFlag,
     Team,
-    WorkspaceFeatureFlag,
 )
 from apps.usage.models import UsageEvent
 
 
-def enable_agents(workspace):
-    flag, _ = FeatureFlag.objects.get_or_create(name="agents")
-    WorkspaceFeatureFlag.objects.get_or_create(workspace=workspace, flag=flag)
-
-
 @pytest.mark.django_db
 class TestAgentsApi:
-    def test_agents_feature_flag_required(self, auth_client):
-        resp = auth_client.get("/api/v1/agents")
-        assert resp.status_code == 404
-
     def test_create_agent_returns_token_once_and_list_masks_it(self, auth_client, admin_membership):
-        enable_agents(admin_membership.workspace)
-
         resp = auth_client.post(
             "/api/v1/agents",
             data={"name": "Docs bot", "description": "Indexes docs"},
@@ -46,7 +33,6 @@ class TestAgentsApi:
         auth_client,
         admin_membership,
     ):
-        enable_agents(admin_membership.workspace)
         create_resp = auth_client.post(
             "/api/v1/agents",
             data={"name": "Runtime agent"},
@@ -89,7 +75,6 @@ class TestAgentsApi:
         assert agent_resp.json()["items"][0]["slug"] == "agent-deploy"
 
     def test_agent_usage_is_separate_from_people_usage(self, auth_client, admin_membership):
-        enable_agents(admin_membership.workspace)
         agent_resp = auth_client.post(
             "/api/v1/agents",
             data={"name": "Usage agent"},

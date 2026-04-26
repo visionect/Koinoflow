@@ -220,6 +220,7 @@ export interface SkillDetail {
   department_name: string
   team_slug: string
   team_name: string
+  system_kind: string
   owner: User | null
   current_version: SkillVersion | null
   last_reviewed_at: string | null

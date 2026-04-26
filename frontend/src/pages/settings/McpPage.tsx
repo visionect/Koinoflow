@@ -66,13 +66,21 @@ const SCOPE_LABELS: Record<string, { label: string; description: string }> = {
   },
 }
 
-type ClientId = "cursor" | "claude" | "windsurf" | "generic"
+type ClientId = "cursor" | "claude" | "claude-code" | "windsurf" | "generic"
 
-const CLIENT_TABS: { id: ClientId; label: string; snippet: (url: string) => string }[] = [
+type ClientTab = {
+  id: ClientId
+  label: string
+  snippet: (url: string) => string
+  language: "json" | "shell"
+}
+
+const CLIENT_TABS: ClientTab[] = [
   {
     id: "cursor",
     label: "Cursor",
     snippet: (url) => JSON.stringify({ mcpServers: { koinoflow: { url: `${url}/mcp` } } }, null, 2),
+    language: "json",
   },
   {
     id: "claude",
@@ -90,29 +98,47 @@ const CLIENT_TABS: { id: ClientId; label: string; snippet: (url: string) => stri
         null,
         2,
       ),
+    language: "json",
+  },
+  {
+    id: "claude-code",
+    label: "Claude Code",
+    snippet: (url) => `claude mcp add --transport http koinoflow ${url}/mcp`,
+    language: "shell",
   },
   {
     id: "windsurf",
     label: "Windsurf",
     snippet: (url) =>
       JSON.stringify({ mcpServers: { koinoflow: { serverUrl: `${url}/mcp` } } }, null, 2),
+    language: "json",
   },
   {
     id: "generic",
     label: "Other",
     snippet: (url) => JSON.stringify({ mcpServers: { koinoflow: { url: `${url}/mcp` } } }, null, 2),
+    language: "json",
   },
 ]
 
-function buildTeammateInstructions(workspaceName: string | undefined, snippet: string) {
+function buildTeammateInstructions(
+  workspaceName: string | undefined,
+  snippet: string,
+  language: "json" | "shell",
+) {
   const name = workspaceName ?? "our workspace"
+  const fence = language === "shell" ? "bash" : "json"
+  const heading =
+    language === "shell"
+      ? "## 1. Run this command in your MCP client"
+      : "## 1. Add this config to your MCP client"
   return `# Connecting to Koinoflow MCP
 
-Koinoflow exposes ${name}'s skills as an MCP server so your AI client (Cursor, Claude Desktop, Windsurf, etc.) can read and search them.
+Koinoflow exposes ${name}'s skills as an MCP server so your AI client (Cursor, Claude Desktop, Claude Code, Windsurf, etc.) can read and search them.
 
-## 1. Add this config to your MCP client
+${heading}
 
-\`\`\`json
+\`\`\`${fence}
 ${snippet}
 \`\`\`
 
@@ -348,8 +374,8 @@ export function McpPage() {
   const activeTab = CLIENT_TABS.find((tab) => tab.id === activeClient) ?? CLIENT_TABS[0]!
   const snippet = activeTab.snippet(MCP_SERVER_URL)
   const teammateInstructions = React.useMemo(
-    () => buildTeammateInstructions(workspaceSlug ?? undefined, snippet),
-    [workspaceSlug, snippet],
+    () => buildTeammateInstructions(workspaceSlug ?? undefined, snippet, activeTab.language),
+    [workspaceSlug, snippet, activeTab.language],
   )
 
   if (!isAdmin) {
@@ -418,18 +444,21 @@ export function McpPage() {
             </TabsList>
             {CLIENT_TABS.map((tab) => {
               const tabSnippet = tab.snippet(MCP_SERVER_URL)
+              const isShell = tab.language === "shell"
               return (
                 <TabsContent key={tab.id} value={tab.id} className="mt-4">
                   <div className="min-w-0 rounded-xl border bg-muted/40 p-4">
                     <div className="mb-2 flex items-center justify-between gap-3">
-                      <Label className="text-sm font-medium">{tab.label} config</Label>
+                      <Label className="text-sm font-medium">
+                        {tab.label} {isShell ? "command" : "config"}
+                      </Label>
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => void handleCopy(tabSnippet)}
                       >
                         <CopyIcon aria-hidden />
-                        Copy JSON
+                        {isShell ? "Copy command" : "Copy JSON"}
                       </Button>
                     </div>
                     <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-background p-3 text-sm">

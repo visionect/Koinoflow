@@ -73,7 +73,6 @@ class AgentTokenAuthentication(HttpBearer):
             return None
 
         from apps.agents.models import Agent
-        from apps.orgs.models import WorkspaceFeatureFlag
 
         token_hash = Agent.hash_token(token)
         try:
@@ -82,13 +81,6 @@ class AgentTokenAuthentication(HttpBearer):
                 is_active=True,
             )
         except Agent.DoesNotExist:
-            return None
-
-        feature_enabled = WorkspaceFeatureFlag.objects.filter(
-            workspace=agent.workspace,
-            flag__name="agents",
-        ).exists()
-        if not feature_enabled:
             return None
 
         agent.last_used_at = timezone.now()
