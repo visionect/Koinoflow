@@ -1,7 +1,7 @@
 import { BarChart3Icon, BotIcon, Building2Icon, FileTextIcon, KeyRoundIcon } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 
-import { useSkilles, useTeams, useUsageSummary } from "@/api/client"
+import { useSkills, useTeams, useUsageSummary } from "@/api/client"
 import { PageHeader } from "@/components/shared/PageHeader"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"

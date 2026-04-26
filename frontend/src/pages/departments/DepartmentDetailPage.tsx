@@ -17,7 +17,7 @@ import { toast } from "sonner"
 import {
   useDeleteDepartment,
   useDepartment,
-  useSkilles,
+  useSkills,
   useUpdateDepartment,
   useWorkspaceMembers,
 } from "@/api/client"

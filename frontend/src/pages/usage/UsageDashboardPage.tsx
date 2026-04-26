@@ -759,7 +759,7 @@ function ActivityLogTab({ period, workspace }: { period: number; workspace: stri
     days: period,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
-    skill: skillFilter !== ALL_FILTER ? processFilter : undefined,
+    skill: skillFilter !== ALL_FILTER ? skillFilter : undefined,
     client_type: clientFilter !== ALL_FILTER ? clientFilter : undefined,
   })
 
@@ -767,7 +767,7 @@ function ActivityLogTab({ period, workspace }: { period: number; workspace: stri
 
   React.useEffect(() => {
     setPage(0)
-  }, [processFilter, clientFilter, period])
+  }, [skillFilter, clientFilter, period])
 
   const events = eventsQuery.data?.items ?? []
   const totalCount = eventsQuery.data?.count ?? 0
@@ -823,7 +823,7 @@ function ActivityLogTab({ period, workspace }: { period: number; workspace: stri
           </SelectContent>
         </Select>
 
-        {(processFilter !== ALL_FILTER || clientFilter !== ALL_FILTER) && (
+        {(skillFilter !== ALL_FILTER || clientFilter !== ALL_FILTER) && (
           <Button
             variant="ghost"
             size="sm"

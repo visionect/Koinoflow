@@ -257,9 +257,7 @@ async def test_read_skill_can_skip_support_file_manifest():
 @respx.mock
 async def test_list_skills_formats_output():
     _set_token_scope()
-    respx.get("http://testserver/api/v1/skills").mock(
-        return_value=Response(200, json=PROCESS_LIST)
-    )
+    respx.get("http://testserver/api/v1/skills").mock(return_value=Response(200, json=PROCESS_LIST))
 
     result = await list_skills()
 
@@ -394,9 +392,7 @@ async def test_apply_skill_update_creates_new_version():
     respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL)
     )
-    create_route = respx.post(
-        "http://testserver/api/v1/skills/deploy-to-production/versions"
-    ).mock(
+    create_route = respx.post("http://testserver/api/v1/skills/deploy-to-production/versions").mock(
         return_value=Response(
             201,
             json={"id": "version-id-1", "version_number": 4},

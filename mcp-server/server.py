@@ -406,8 +406,7 @@ def _refinement_suggestions(markdown: str) -> list[str]:
         )
     if not suggestions:
         suggestions.append(
-            "The skill is structured. Consider adding measurable success criteria for each"
-            " outcome."
+            "The skill is structured. Consider adding measurable success criteria for each outcome."
         )
     return suggestions
 

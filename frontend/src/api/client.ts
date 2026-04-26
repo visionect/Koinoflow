@@ -501,7 +501,7 @@ export function useDeleteDepartment() {
   })
 }
 
-export function useSkilles(filters?: ProcessListFilters) {
+export function useSkills(filters?: ProcessListFilters) {
   return useQuery({
     queryKey: queryKeys.skills.all(filters),
     queryFn: () => {
@@ -564,7 +564,7 @@ export function useUpdateSkill(slug: string) {
   })
 }
 
-export function useUnshareProcessFromMyTeam(slug: string) {
+export function useUnshareSkillFromMyTeam(slug: string) {
   const queryClient = useQueryClient()
 
   return useMutation({

@@ -28,8 +28,8 @@ import {
   useSkill,
   usePublishSkill,
   useReviewSkill,
-  useSkilles,
-  useUnshareProcessFromMyTeam,
+  useSkills,
+  useUnshareSkillFromMyTeam,
   useUpdateSkill,
   useUpdateVersionSummary,
   useVersion,
@@ -237,7 +237,7 @@ export function SkillViewPage() {
     ...EMPTY_KOINOFLOW_METADATA,
   })
 
-  const allProcessesQuery = useSkilles({ limit: 200 })
+  const allSkillsQuery = useSkills({ limit: 200 })
   const prerequisiteSuggestions = React.useMemo(
     () =>
       (allSkillsQuery.data?.items ?? [])

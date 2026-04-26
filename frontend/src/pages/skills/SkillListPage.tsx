@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 import { Link, useParams, useSearchParams } from "react-router-dom"
 
-import { useDepartments, useSkilles, useTeams } from "@/api/client"
+import { useDepartments, useSkills, useTeams } from "@/api/client"
 import { DiscoveryEmbeddingStatusBadge } from "@/components/skills/DiscoveryEmbeddingStatusBadge"
 import { SkillCreateDialog } from "@/components/skills/SkillCreateDialog"
 import { EmptyState } from "@/components/shared/EmptyState"
