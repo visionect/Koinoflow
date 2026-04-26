@@ -442,9 +442,7 @@ def agent_analytics(request, days: int = 30):
     )
     total_calls = qs.count()
     by_agent = list(
-        qs.values("agent_id", "agent__name")
-        .annotate(count=Count("id"))
-        .order_by("-count")[:10]
+        qs.values("agent_id", "agent__name").annotate(count=Count("id")).order_by("-count")[:10]
     )
     by_skill = list(
         qs.values("skill_id", "skill__slug", "skill__title")
