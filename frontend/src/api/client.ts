@@ -237,8 +237,9 @@ export const queryKeys = {
     all: ["agents"] as const,
     skills: ["agents", "skills"] as const,
     deployment: (slug: string) => ["agents", "skills", slug, "deployment"] as const,
-    usage: (days: number) => ["agents", "usage", days] as const,
-    analytics: (days: number) => ["agents", "analytics", days] as const,
+    usage: (days: number, agentId?: string) => ["agents", "usage", days, agentId ?? "all"] as const,
+    analytics: (days: number, agentId?: string) =>
+      ["agents", "analytics", days, agentId ?? "all"] as const,
   },
   mcp: {
     connections: ["mcp", "connections"] as const,
@@ -942,9 +943,10 @@ export function useRevokeApiKey() {
   })
 }
 
-export function useAgents() {
+export function useAgents(enabled = true) {
   return useQuery({
     queryKey: queryKeys.agents.all,
+    enabled,
     queryFn: async () => {
       const res = await apiFetch<{ items: Agent[]; count: number }>("/agents")
       return res.items
@@ -1049,17 +1051,23 @@ export function useUpdateAgentSkillDeployment(slug: string) {
   })
 }
 
-export function useAgentUsage(days = 30) {
+export function useAgentUsage(days = 30, agentId?: string) {
   return useQuery({
-    queryKey: queryKeys.agents.usage(days),
-    queryFn: () => apiFetch<PaginatedResponse<AgentUsageEvent>>(`/agents/usage?days=${days}`),
+    queryKey: queryKeys.agents.usage(days, agentId),
+    queryFn: () =>
+      apiFetch<PaginatedResponse<AgentUsageEvent>>(
+        `/agents/usage?${buildSearchParams({ days, agent_id: agentId })}`,
+      ),
   })
 }
 
-export function useAgentAnalytics(days = 30) {
+export function useAgentAnalytics(days = 30, agentId?: string) {
   return useQuery({
-    queryKey: queryKeys.agents.analytics(days),
-    queryFn: () => apiFetch<AgentAnalytics>(`/agents/analytics?days=${days}`),
+    queryKey: queryKeys.agents.analytics(days, agentId),
+    queryFn: () =>
+      apiFetch<AgentAnalytics>(
+        `/agents/analytics?${buildSearchParams({ days, agent_id: agentId })}`,
+      ),
   })
 }
 
