@@ -12,7 +12,7 @@ from apps.accounts.auth import api_or_session
 from apps.accounts.permissions import require_role
 from apps.common.throttles import ReadThrottle, UsageLogThrottle
 from apps.orgs.enums import RoleChoices
-from apps.orgs.models import get_effective_settings
+from apps.orgs.models import SYSTEM_KIND_AGENTS, get_effective_settings
 from apps.skills.enums import StatusChoices
 from apps.skills.models import Skill
 from apps.usage.enums import ClientType
@@ -116,6 +116,8 @@ def list_usage(
     qs = (
         UsageEvent.objects.filter(
             skill__department__team__workspace=workspace,
+            skill__department__system_kind="",
+            agent__isnull=True,
             called_at__gte=since,
         )
         .select_related("skill")
@@ -148,7 +150,9 @@ def usage_summary(request, days: int = 30, limit: int = 50, offset: int = 0):
     processes = (
         Skill.objects.filter(
             department__team__workspace=workspace,
+            department__system_kind="",
             usage_events__called_at__gte=since,
+            usage_events__agent__isnull=True,
         )
         .annotate(
             total_calls=Count("usage_events"),
@@ -164,7 +168,7 @@ def usage_summary(request, days: int = 30, limit: int = 50, offset: int = 0):
     page_ids = [p.id for p in page]
 
     breakdown_qs = (
-        UsageEvent.objects.filter(skill_id__in=page_ids, called_at__gte=since)
+        UsageEvent.objects.filter(skill_id__in=page_ids, called_at__gte=since, agent__isnull=True)
         .values("skill_id", "client_type")
         .annotate(count=Count("id"))
     )
@@ -262,11 +266,14 @@ def usage_analytics(request, days: int = 30):
 
     ws_filter = dict(
         skill__department__team__workspace=workspace,
+        skill__department__system_kind="",
+        agent__isnull=True,
         called_at__gte=since,
     )
 
     published_count = Skill.objects.filter(
         department__team__workspace=workspace,
+        department__system_kind="",
         status=StatusChoices.PUBLISHED,
     ).count()
     consumed_count = UsageEvent.objects.filter(**ws_filter).values("skill_id").distinct().count()
@@ -275,8 +282,10 @@ def usage_analytics(request, days: int = 30):
     stale_processes = (
         Skill.objects.filter(
             department__team__workspace=workspace,
+            department__system_kind="",
             status=StatusChoices.PUBLISHED,
             usage_events__called_at__gte=since,
+            usage_events__agent__isnull=True,
         )
         .select_related("owner", "department__team")
         .annotate(call_count=Count("usage_events"))
@@ -346,6 +355,8 @@ def usage_analytics(request, days: int = 30):
     previous_since = since - timedelta(days=days)
     total_calls_previous = UsageEvent.objects.filter(
         skill__department__team__workspace=workspace,
+        skill__department__system_kind="",
+        agent__isnull=True,
         called_at__gte=previous_since,
         called_at__lt=since,
     ).count()
@@ -374,6 +385,7 @@ def usage_analytics(request, days: int = 30):
     gap_processes = (
         Skill.objects.filter(
             department__team__workspace=workspace,
+            department__system_kind="",
             status=StatusChoices.PUBLISHED,
         )
         .exclude(id__in=list(consumed_ids))
@@ -424,6 +436,7 @@ def usage_analytics(request, days: int = 30):
 @router.post("/usage", auth=api_or_session, throttle=[UsageLogThrottle()])
 def log_usage_event(request, payload: CreateUsageEventIn):
     workspace = request.workspace
+    agent = getattr(request, "agent", None)
     try:
         skill = Skill.objects.get(
             id=payload.skill_id,
@@ -432,7 +445,17 @@ def log_usage_event(request, payload: CreateUsageEventIn):
     except Skill.DoesNotExist:
         raise HttpError(404, "Skill not found")
 
+    if agent is not None:
+        from apps.agents.selectors import skills_for_agent
+
+        if not skills_for_agent(agent).filter(id=skill.id).exists():
+            raise HttpError(404, "Skill not found")
+    elif skill.department.system_kind == SYSTEM_KIND_AGENTS:
+        raise HttpError(404, "Skill not found")
+
     client_type = payload.client_type
+    if agent is not None:
+        client_type = "Agent"
     if client_type == ClientType.MCP:
         resolved = _oauth_client_name(request)
         if resolved:
@@ -440,6 +463,7 @@ def log_usage_event(request, payload: CreateUsageEventIn):
 
     UsageEvent.objects.create(
         skill=skill,
+        agent=agent,
         version_number=payload.version_number,
         client_id=payload.client_id,
         client_type=client_type,

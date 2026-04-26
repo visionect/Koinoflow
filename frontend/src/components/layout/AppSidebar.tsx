@@ -104,6 +104,15 @@ const CAPTURE_LINKS = [
   },
 ]
 
+const AGENTS_LINKS = [
+  {
+    label: "Agents",
+    tooltip: "Manage AI agents, agent skills, and agent usage.",
+    icon: BotIcon,
+    href: "/agents",
+  },
+]
+
 const SETTINGS_LINKS = [
   {
     label: "Settings",
@@ -222,6 +231,26 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {CAPTURE_LINKS.map((item) => (
+                  <SidebarMenuItem key={item.label}>
+                    <SidebarMenuButton asChild tooltip={item.tooltip ?? item.label}>
+                      <NavLink to={buildWorkspacePath(workspace, item.href)}>
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {hasFeature("agents") && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Agents</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {AGENTS_LINKS.map((item) => (
                   <SidebarMenuItem key={item.label}>
                     <SidebarMenuButton asChild tooltip={item.tooltip ?? item.label}>
                       <NavLink to={buildWorkspacePath(workspace, item.href)}>

@@ -8,11 +8,13 @@ def log_usage_event(
     version_number: int,
     client_id: str = "unknown",
     client_type: str = ClientType.UNKNOWN,
+    agent_id: str | None = None,
 ):
     from apps.usage.models import UsageEvent
 
     UsageEvent.objects.create(
         skill_id=skill_id,
+        agent_id=agent_id,
         version_number=version_number,
         client_id=client_id,
         client_type=client_type,

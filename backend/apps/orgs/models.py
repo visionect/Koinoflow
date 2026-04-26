@@ -9,6 +9,8 @@ from django.dispatch import receiver
 from apps.common.models import BaseModel
 from apps.orgs.enums import EntityType, InvitationStatus, RoleChoices
 
+SYSTEM_KIND_AGENTS = "agents"
+
 
 class Workspace(BaseModel):
     name = models.CharField(max_length=255)
@@ -72,6 +74,7 @@ class Team(BaseModel):
         related_name="teams",
     )
     name = models.CharField(max_length=255)
+    system_kind = models.CharField(max_length=50, blank=True, default="", db_index=True)
 
     class Meta:
         db_table = "team"
@@ -90,6 +93,7 @@ class Department(BaseModel):
         related_name="departments",
     )
     name = models.CharField(max_length=255)
+    system_kind = models.CharField(max_length=50, blank=True, default="", db_index=True)
     owner = models.ForeignKey(
         "accounts.User",
         on_delete=models.SET_NULL,

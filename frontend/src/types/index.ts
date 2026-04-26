@@ -332,6 +332,67 @@ export interface CreatedApiKey {
   role: ApiKeyRole
 }
 
+export interface Agent {
+  id: string
+  name: string
+  description: string
+  token_prefix: string
+  masked_token: string
+  is_active: boolean
+  last_used_at: string | null
+  created_at: string
+}
+
+export interface CreatedAgent extends Agent {
+  token: string
+}
+
+export interface CreateAgentInput {
+  name: string
+  description?: string
+}
+
+export interface UpdateAgentInput {
+  name?: string
+  description?: string
+  is_active?: boolean
+}
+
+export interface ImportAgentSkillInput {
+  title: string
+  slug: string
+  description?: string
+  content_md: string
+  frontmatter_yaml?: string
+  files?: VersionFileInput[]
+  deploy_to_all: boolean
+  agent_ids: string[]
+}
+
+export interface AgentSkill {
+  id: string
+  title: string
+  slug: string
+  description: string
+  deploy_to_all: boolean
+  agent_ids: string[]
+  created_at: string
+  updated_at: string
+}
+
+export interface AgentUsageEvent extends UsageEvent {
+  agent_id: string | null
+  agent_name: string | null
+}
+
+export interface AgentAnalytics {
+  total_calls: number
+  active_agents: number
+  skills_touched: number
+  by_agent: Array<{ agent_id: string | null; agent_name: string; count: number }>
+  by_skill: Array<{ skill_id: string; skill_slug: string; skill_title: string; count: number }>
+}
+
 export interface UsageEvent {
   id: string
   skill_title: string

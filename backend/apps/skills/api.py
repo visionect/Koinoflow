@@ -35,7 +35,7 @@ from apps.common.throttles import (
 )
 from apps.orgs.api import UserBriefOut, _user_brief
 from apps.orgs.enums import EntityType, RoleChoices
-from apps.orgs.models import Membership, get_effective_settings
+from apps.orgs.models import SYSTEM_KIND_AGENTS, Membership, get_effective_settings
 from apps.skills.discovery import (
     VertexEmbeddingClient,
     get_embedding_config,
@@ -780,6 +780,16 @@ def _get_skill(request, slug: str, *, allow_draft=True):
     except Skill.DoesNotExist:
         raise HttpError(404, "Skill not found")
 
+    agent = getattr(request, "agent", None)
+    if agent is not None:
+        from apps.agents.selectors import skills_for_agent
+
+        allowed = skills_for_agent(agent).filter(pk=skill.pk)
+        if not allowed.exists():
+            raise HttpError(404, "Skill not found")
+    elif skill.department.system_kind == SYSTEM_KIND_AGENTS:
+        raise HttpError(404, "Skill not found")
+
     is_api_key = hasattr(request, "api_key")
     if is_api_key and not allow_draft and skill.status != StatusChoices.PUBLISHED:
         raise HttpError(404, "Skill not found")
@@ -800,12 +810,23 @@ def _base_skill_queryset(request):
 
     is_api_key = hasattr(request, "api_key")
     is_oauth = hasattr(request, "oauth_token")
-    if is_api_key:
+    agent = getattr(request, "agent", None)
+    if agent is not None:
+        from apps.agents.selectors import skills_for_agent
+
+        qs = skills_for_agent(agent).select_related(
+            "department__team", "owner", "current_version__discovery_embedding"
+        )
+    elif is_api_key:
         qs = qs.filter(status=StatusChoices.PUBLISHED)
         qs = apply_api_key_scope(request.api_key, qs)
+        qs = qs.exclude(department__system_kind=SYSTEM_KIND_AGENTS)
     elif is_oauth:
         qs = qs.filter(status=StatusChoices.PUBLISHED)
         qs = apply_oauth_connection_scope(request, qs)
+        qs = qs.exclude(department__system_kind=SYSTEM_KIND_AGENTS)
+    else:
+        qs = qs.exclude(department__system_kind=SYSTEM_KIND_AGENTS)
     return qs
 
 
@@ -1075,7 +1096,7 @@ def create_skill(request, payload: CreateSkillIn):
 
     try:
         dept = Department.objects.select_related("team").get(
-            id=payload.department_id, team__workspace=workspace
+            id=payload.department_id, team__workspace=workspace, system_kind=""
         )
     except Department.DoesNotExist:
         raise HttpError(404, "Department not found")

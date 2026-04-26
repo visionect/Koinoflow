@@ -15,7 +15,7 @@ from django.views.decorators.http import require_POST
 from oauth2_provider.models import AccessToken
 
 from apps.orgs.middleware import resolve_membership_for_user
-from apps.orgs.models import CoreSlug, EntityType
+from apps.orgs.models import CoreSlug, EntityType, WorkspaceFeatureFlag
 
 
 def _secrets_equal(a: str, b: str) -> bool:
@@ -72,6 +72,50 @@ def introspect_token(request):
     token_value = request.POST.get("token", "")
     if not token_value:
         return JsonResponse({"active": False})
+
+    if token_value.startswith("ag_"):
+        from django.utils import timezone
+
+        from apps.agents.models import Agent
+
+        try:
+            agent = Agent.objects.select_related("workspace").get(
+                token_hash=Agent.hash_token(token_value),
+                is_active=True,
+            )
+        except Agent.DoesNotExist:
+            return JsonResponse({"active": False})
+
+        feature_enabled = WorkspaceFeatureFlag.objects.filter(
+            workspace=agent.workspace,
+            flag__name="agents",
+        ).exists()
+        if not feature_enabled:
+            return JsonResponse({"active": False})
+
+        agent.last_used_at = timezone.now()
+        agent.save(update_fields=["last_used_at", "updated_at"])
+        try:
+            slug = CoreSlug.objects.get(
+                entity_type=EntityType.WORKSPACE,
+                entity_id=agent.workspace_id,
+            ).slug
+        except CoreSlug.DoesNotExist:
+            slug = ""
+
+        return JsonResponse(
+            {
+                "active": True,
+                "scope": "skills:read usage:write",
+                "client_id": str(agent.id),
+                "token_type": "Bearer",
+                "agent_id": str(agent.id),
+                "agent_name": agent.name,
+                "workspace_id": str(agent.workspace_id),
+                "workspace_slug": slug,
+                "role": "agent",
+            }
+        )
 
     try:
         access_token = AccessToken.objects.select_related("user").get(token=token_value)

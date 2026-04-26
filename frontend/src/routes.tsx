@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { LoadingScreen } from "@/components/shared/LoadingScreen"
 import { AcceptInvitationPage } from "@/pages/AcceptInvitationPage"
+import { AgentsPage } from "@/pages/agents/AgentsPage"
 import { consumeInvitationToken } from "@/lib/invitationToken"
 import { DashboardPage } from "@/pages/DashboardPage"
 import { DepartmentDetailPage } from "@/pages/departments/DepartmentDetailPage"
@@ -89,6 +90,14 @@ export function AppRoutes() {
         <Route path="settings/members" element={<MembersPage />} />
         <Route path="settings/mcp" element={<McpPage />} />
         <Route path="settings/keys" element={<ApiKeysPage />} />
+        <Route
+          path="agents"
+          element={
+            <RequireFeature flag="agents">
+              <AgentsPage />
+            </RequireFeature>
+          }
+        />
         <Route
           path="capture/connectors"
           element={

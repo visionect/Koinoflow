@@ -12,6 +12,13 @@ class UsageEvent(models.Model):
         on_delete=models.CASCADE,
         related_name="usage_events",
     )
+    agent = models.ForeignKey(
+        "agents.Agent",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="usage_events",
+    )
     version_number = models.PositiveIntegerField()
     client_id = models.CharField(max_length=255, default="unknown")
     client_type = models.CharField(max_length=100, default=ClientType.UNKNOWN)

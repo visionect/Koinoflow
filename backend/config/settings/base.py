@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "apps.common",
     "apps.accounts",
     "apps.orgs",
+    "apps.agents",
     "apps.skills",
     "apps.usage",
     "apps.connectors",
