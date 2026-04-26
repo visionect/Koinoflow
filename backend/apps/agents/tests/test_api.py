@@ -81,6 +81,13 @@ class TestAgentsApi:
             content_type="application/json",
         )
         token = agent_resp.json()["token"]
+        agent_id = agent_resp.json()["id"]
+        other_agent_resp = auth_client.post(
+            "/api/v1/agents",
+            data={"name": "Other usage agent"},
+            content_type="application/json",
+        )
+        other_token = other_agent_resp.json()["token"]
 
         import_resp = auth_client.post(
             "/api/v1/agents/skills/import",
@@ -108,8 +115,23 @@ class TestAgentsApi:
             HTTP_AUTHORIZATION=f"Bearer {token}",
         )
         assert log_resp.status_code == 200
-        event = UsageEvent.objects.get()
-        assert event.agent == Agent.objects.get(id=agent_resp.json()["id"])
+
+        other_log_resp = auth_client.post(
+            "/api/v1/usage",
+            data={
+                "skill_id": skill_id,
+                "version_number": 1,
+                "client_id": "other-agent-runtime",
+                "client_type": "MCP",
+                "tool_name": "get_skill",
+            },
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {other_token}",
+        )
+        assert other_log_resp.status_code == 200
+
+        event = UsageEvent.objects.get(client_id="agent-runtime")
+        assert event.agent == Agent.objects.get(id=agent_id)
         assert event.client_type == "Agent"
 
         people_usage = auth_client.get("/api/v1/usage")
@@ -118,4 +140,13 @@ class TestAgentsApi:
 
         agent_usage = auth_client.get("/api/v1/agents/usage")
         assert agent_usage.status_code == 200
-        assert agent_usage.json()["count"] == 1
+        assert agent_usage.json()["count"] == 2
+
+        filtered_usage = auth_client.get(f"/api/v1/agents/usage?agent_id={agent_id}")
+        assert filtered_usage.status_code == 200
+        assert filtered_usage.json()["count"] == 1
+
+        filtered_analytics = auth_client.get(f"/api/v1/agents/analytics?agent_id={agent_id}")
+        assert filtered_analytics.status_code == 200
+        assert filtered_analytics.json()["total_calls"] == 1
+        assert filtered_analytics.json()["active_agents"] == 1

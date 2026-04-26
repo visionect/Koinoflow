@@ -487,7 +487,7 @@ def list_agent_usage(
     throttle=[ReadThrottle()],
 )
 @require_role(RoleChoices.ADMIN)
-def agent_analytics(request, days: int = 30):
+def agent_analytics(request, days: int = 30, agent_id: str | None = None):
     _require_workspace(request.workspace)
     days = max(1, min(days, 365))
     since = timezone.now() - timedelta(days=days)
@@ -496,6 +496,8 @@ def agent_analytics(request, days: int = 30):
         skill__department__system_kind=SYSTEM_KIND_AGENTS,
         called_at__gte=since,
     )
+    if agent_id:
+        qs = qs.filter(agent_id=agent_id)
     total_calls = qs.count()
     by_agent = list(
         qs.values("agent_id", "agent__name").annotate(count=Count("id")).order_by("-count")[:10]

@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { Link, NavLink, useParams } from "react-router-dom"
 
-import { useEffectiveSettings, useTeams } from "@/api/client"
+import { useAgents, useEffectiveSettings, useTeams } from "@/api/client"
 import { useAuth } from "@/hooks/useAuth"
 import { buildWorkspacePath } from "@/lib/format"
 import {
@@ -151,7 +151,8 @@ const ROLE_LABELS: Record<string, string> = {
 export function AppSidebar() {
   const { workspace } = useParams<{ workspace: string }>()
   const { data: teams, isLoading } = useTeams()
-  const { role, hasFeature } = useAuth()
+  const { role, hasFeature, isAdmin } = useAuth()
+  const { data: agents, isLoading: agentsLoading } = useAgents(isAdmin)
   const { data: wsSettings } = useEffectiveSettings()
   const apiAccessEnabled = wsSettings?.enable_api_access !== false
 
@@ -260,6 +261,22 @@ export function AppSidebar() {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {isAdmin && agentsLoading
+                ? Array.from({ length: 2 }).map((_, index) => (
+                    <SidebarMenuItem key={index}>
+                      <SidebarMenuSkeleton showIcon />
+                    </SidebarMenuItem>
+                  ))
+                : agents?.map((agent) => (
+                    <SidebarMenuItem key={agent.id}>
+                      <SidebarMenuButton asChild tooltip={agent.name}>
+                        <NavLink to={buildWorkspacePath(workspace, `/agents/${agent.id}`)}>
+                          <TeamMonogram name={agent.name} slug={agent.id} />
+                          <span>{agent.name}</span>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

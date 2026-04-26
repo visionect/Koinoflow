@@ -144,7 +144,10 @@ function CreateAgentDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button onClick={() => void handleSubmit()} disabled={!name.trim() || createAgent.isPending}>
+          <Button
+            onClick={() => void handleSubmit()}
+            disabled={!name.trim() || createAgent.isPending}
+          >
             Create agent
           </Button>
         </DialogFooter>
@@ -231,11 +234,19 @@ function ImportAgentSkillDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="agent-skill-title">Title</Label>
-              <Input id="agent-skill-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+              <Input
+                id="agent-skill-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="agent-skill-slug">Slug</Label>
-              <Input id="agent-skill-slug" value={slug} onChange={(e) => setSlug(slugify(e.target.value))} />
+              <Input
+                id="agent-skill-slug"
+                value={slug}
+                onChange={(e) => setSlug(slugify(e.target.value))}
+              />
             </div>
           </div>
 
@@ -260,14 +271,19 @@ function ImportAgentSkillDialog({
               <Label>Select agents</Label>
               <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border p-3">
                 {agents.map((agent) => (
-                  <label key={agent.id} className="flex items-start gap-3 rounded-md p-2 hover:bg-muted/50">
+                  <label
+                    key={agent.id}
+                    className="flex items-start gap-3 rounded-md p-2 hover:bg-muted/50"
+                  >
                     <Checkbox
                       checked={selectedAgentIds.has(agent.id)}
                       onCheckedChange={(checked) => toggleAgent(agent.id, Boolean(checked))}
                     />
                     <span>
                       <span className="block text-sm font-medium">{agent.name}</span>
-                      <span className="block text-xs text-muted-foreground">{agent.masked_token}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {agent.masked_token}
+                      </span>
                     </span>
                   </label>
                 ))}
@@ -390,7 +406,9 @@ export function AgentsPage() {
           {agentsQuery.isError ? (
             <ErrorState
               message={
-                agentsQuery.error instanceof Error ? agentsQuery.error.message : "Unable to load agents"
+                agentsQuery.error instanceof Error
+                  ? agentsQuery.error.message
+                  : "Unable to load agents"
               }
               onRetry={() => void agentsQuery.refetch()}
             />
@@ -410,8 +428,13 @@ export function AgentsPage() {
                   {agentsQuery.data.map((agent) => (
                     <TableRow key={agent.id}>
                       <TableCell>
-                        <div className="font-medium">{agent.name}</div>
-                        <div className="text-xs text-muted-foreground">{agent.description}</div>
+                        <Link
+                          to={buildWorkspacePath(workspace, `/agents/${agent.id}`)}
+                          className="block hover:underline"
+                        >
+                          <div className="font-medium">{agent.name}</div>
+                          <div className="text-xs text-muted-foreground">{agent.description}</div>
+                        </Link>
                       </TableCell>
                       <TableCell className="font-mono text-xs">{agent.masked_token}</TableCell>
                       <TableCell>{formatRelativeDate(agent.last_used_at)}</TableCell>
@@ -421,7 +444,11 @@ export function AgentsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell className="space-x-2 text-right">
-                        <Button size="sm" variant="outline" onClick={() => void handleRotate(agent)}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void handleRotate(agent)}
+                        >
                           <RotateCwIcon aria-hidden />
                           Rotate
                         </Button>
@@ -452,7 +479,9 @@ export function AgentsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Agent skills</CardTitle>
-          <CardDescription>Skills imported from this tab are excluded from normal teams and analytics.</CardDescription>
+          <CardDescription>
+            Skills imported from this tab are excluded from normal teams and analytics.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {skillsQuery.data?.length ? (
@@ -479,20 +508,20 @@ export function AgentsPage() {
                         </Link>
                       </TableCell>
                       <TableCell>
-                        {skill.deploy_to_all ? "All agents" : `${skill.agent_ids.length} selected agents`}
+                        {skill.deploy_to_all
+                          ? "All agents"
+                          : `${skill.agent_ids.length} selected agents`}
                       </TableCell>
                       <TableCell>{formatRelativeDate(skill.updated_at)}</TableCell>
                       <TableCell className="space-x-2 text-right">
                         <Button asChild size="sm" variant="outline">
                           <Link to={buildWorkspacePath(workspace, `/skills/${skill.slug}`)}>
                             <PencilIcon aria-hidden />
-                            Open
+                            Open editor
                           </Link>
                         </Button>
                         <Button asChild size="sm" variant="ghost">
-                          <Link
-                            to={buildWorkspacePath(workspace, `/skills/${skill.slug}/history`)}
-                          >
+                          <Link to={buildWorkspacePath(workspace, `/skills/${skill.slug}/history`)}>
                             <HistoryIcon aria-hidden />
                             History
                           </Link>
@@ -515,7 +544,9 @@ export function AgentsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Usage logs</CardTitle>
-          <CardDescription>Agent activity is tracked separately from people-facing analytics.</CardDescription>
+          <CardDescription>
+            Agent activity is tracked separately from people-facing analytics.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {usageQuery.data?.items.length ? (
@@ -542,12 +573,19 @@ export function AgentsPage() {
               </Table>
             </div>
           ) : (
-            <EmptyState title="No agent usage yet" description="Agent MCP calls will appear here." />
+            <EmptyState
+              title="No agent usage yet"
+              description="Agent MCP calls will appear here."
+            />
           )}
         </CardContent>
       </Card>
 
-      <CreateAgentDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={setCreatedAgent} />
+      <CreateAgentDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={setCreatedAgent}
+      />
       <ImportAgentSkillDialog
         open={importOpen}
         onOpenChange={setImportOpen}
