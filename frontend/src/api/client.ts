@@ -1,6 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import type {
+  Agent,
+  AgentAnalytics,
+  AgentSkill,
+  AgentUsageEvent,
   ApiKey,
   ApiKeyRoleOption,
   ApiOkResponse,
@@ -9,18 +13,21 @@ import type {
   CaptureCandidate,
   ConnectorCredential,
   CreateApiKeyInput,
+  CreateAgentInput,
   CreateDepartmentInput,
   CreateSkillInput,
   CreateTeamInput,
   CreateVersionInput,
   CreateWorkspaceInput,
   CreatedApiKey,
+  CreatedAgent,
   Department,
   EffectiveSettings,
   ExtractionJob,
   FileDiffEntry,
   InviteMemberInput,
   InviteResponse,
+  ImportAgentSkillInput,
   McpConnection,
   McpConnectionScope,
   McpConnectionScopeInput,
@@ -43,6 +50,7 @@ import type {
   Team,
   TeamDetail,
   UpdateDepartmentInput,
+  UpdateAgentInput,
   UpdateSkillInput,
   UpdateTeamInput,
   UpdateVersionSummaryInput,
@@ -224,6 +232,12 @@ export const queryKeys = {
   apiKeys: {
     all: ["api-keys"] as const,
     roles: ["api-key-roles"] as const,
+  },
+  agents: {
+    all: ["agents"] as const,
+    skills: ["agents", "skills"] as const,
+    usage: (days: number) => ["agents", "usage", days] as const,
+    analytics: (days: number) => ["agents", "analytics", days] as const,
   },
   mcp: {
     connections: ["mcp", "connections"] as const,
@@ -924,6 +938,102 @@ export function useRevokeApiKey() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.apiKeys.all })
     },
+  })
+}
+
+export function useAgents() {
+  return useQuery({
+    queryKey: queryKeys.agents.all,
+    queryFn: async () => {
+      const res = await apiFetch<{ items: Agent[]; count: number }>("/agents")
+      return res.items
+    },
+  })
+}
+
+export function useCreateAgent() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: CreateAgentInput) =>
+      apiFetch<CreatedAgent>("/agents", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
+    },
+  })
+}
+
+export function useUpdateAgent() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ id, ...payload }: UpdateAgentInput & { id: string }) =>
+      apiFetch<Agent>(`/agents/${id}/settings`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
+    },
+  })
+}
+
+export function useRotateAgentToken() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<CreatedAgent>(`/agents/${id}/rotate-token`, {
+        method: "POST",
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.agents.all })
+    },
+  })
+}
+
+export function useAgentSkills() {
+  return useQuery({
+    queryKey: queryKeys.agents.skills,
+    queryFn: async () => {
+      const res = await apiFetch<{ items: AgentSkill[]; count: number }>("/agents/skills")
+      return res.items
+    },
+  })
+}
+
+export function useImportAgentSkill() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: ImportAgentSkillInput) =>
+      apiFetch<AgentSkill>("/agents/skills/import", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.skills }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.analytics(30) }),
+      ])
+    },
+  })
+}
+
+export function useAgentUsage(days = 30) {
+  return useQuery({
+    queryKey: queryKeys.agents.usage(days),
+    queryFn: () => apiFetch<PaginatedResponse<AgentUsageEvent>>(`/agents/usage?days=${days}`),
+  })
+}
+
+export function useAgentAnalytics(days = 30) {
+  return useQuery({
+    queryKey: queryKeys.agents.analytics(days),
+    queryFn: () => apiFetch<AgentAnalytics>(`/agents/analytics?days=${days}`),
   })
 }
 

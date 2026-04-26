@@ -2,6 +2,7 @@ from ninja import NinjaAPI
 
 from apps.accounts.api import router as auth_router
 from apps.accounts.mcp_api import router as mcp_router
+from apps.agents.api import router as agents_router
 from apps.common.throttles import GlobalAnonThrottle, GlobalAuthThrottle
 from apps.connectors.api import router as connectors_router
 from apps.orgs.api import router as orgs_router
@@ -28,6 +29,7 @@ def health(request):
 api.add_router("/v1/auth/", auth_router)
 api.add_router("/v1/", orgs_router)
 api.add_router("/v1/", api_keys_router)
+api.add_router("/v1/", agents_router)
 api.add_router("/v1/", skills_router)
 api.add_router("/v1/", usage_router)
 api.add_router("/v1/", mcp_router)

@@ -19,6 +19,7 @@ from apps.common.throttles import (
 from apps.orgs.enums import EntityType, InvitationStatus, RoleChoices
 from apps.orgs.models import (
     SETTINGS_FIELDS,
+    SYSTEM_KIND_AGENTS,
     CoreSettings,
     CoreSlug,
     Department,
@@ -426,7 +427,9 @@ def _resolve_team_by_slug(workspace, slug):
     """Resolve a Team from its slug within a workspace via CoreSlug."""
     try:
         cs = resolve_slug(EntityType.TEAM, slug, scope_workspace=workspace)
-        return Team.objects.get(id=cs.entity_id, workspace=workspace)
+        return Team.objects.exclude(system_kind=SYSTEM_KIND_AGENTS).get(
+            id=cs.entity_id, workspace=workspace
+        )
     except (CoreSlug.DoesNotExist, Team.DoesNotExist):
         raise HttpError(404, "Team not found")
 
@@ -458,6 +461,28 @@ def create_workspace(request, payload: CreateWorkspaceIn):
             role=RoleChoices.ADMIN,
         )
         SkillAuditRule.objects.create(workspace=workspace, period_days=90)
+        agents_team = Team.objects.create(
+            workspace=workspace,
+            name="Agents",
+            system_kind=SYSTEM_KIND_AGENTS,
+        )
+        create_slug(
+            EntityType.TEAM,
+            agents_team.id,
+            unique_slug(EntityType.TEAM, "agents", scope_workspace=workspace),
+            scope_workspace=workspace,
+        )
+        agents_department = Department.objects.create(
+            team=agents_team,
+            name="Agents",
+            system_kind=SYSTEM_KIND_AGENTS,
+        )
+        create_slug(
+            EntityType.DEPARTMENT,
+            agents_department.id,
+            unique_slug(EntityType.DEPARTMENT, "agents", scope_team=agents_team),
+            scope_team=agents_team,
+        )
 
         if settings.ENABLE_BILLING:
             trial_plan, _ = Plan.objects.get_or_create(
@@ -812,6 +837,7 @@ def list_teams(request, limit: int = 50, offset: int = 0):
     offset = max(offset, 0)
     qs = (
         Team.objects.filter(workspace=workspace)
+        .exclude(system_kind=SYSTEM_KIND_AGENTS)
         .annotate(department_count=Count("departments"))
         .order_by("name")
     )
@@ -844,6 +870,7 @@ def get_team(request, slug: str):
 
     departments = (
         Department.objects.filter(team=team)
+        .exclude(system_kind=SYSTEM_KIND_AGENTS)
         .select_related("team", "owner")
         .annotate(**_department_process_count_annotations())
         .order_by("name")
@@ -895,6 +922,7 @@ def list_departments(request, team: str | None = None, limit: int = 50, offset: 
     offset = max(offset, 0)
     qs = (
         Department.objects.filter(team__workspace=workspace)
+        .exclude(system_kind=SYSTEM_KIND_AGENTS)
         .select_related("team", "owner")
         .annotate(**_department_process_count_annotations())
         .order_by("name")
@@ -923,6 +951,7 @@ def get_department(request, id: str):
     try:
         dept = (
             Department.objects.filter(id=id, team__workspace=workspace)
+            .exclude(system_kind=SYSTEM_KIND_AGENTS)
             .select_related("team", "owner")
             .annotate(**_department_process_count_annotations())
             .get()
@@ -980,7 +1009,7 @@ def update_department(request, id: str, payload: UpdateDepartmentIn):
     workspace = request.workspace
     try:
         dept = Department.objects.select_related("team", "owner").get(
-            id=id, team__workspace=workspace
+            id=id, team__workspace=workspace, system_kind=""
         )
     except Department.DoesNotExist:
         raise HttpError(404, "Department not found")
@@ -1013,7 +1042,9 @@ def update_department(request, id: str, payload: UpdateDepartmentIn):
 def delete_department(request, id: str):
     workspace = request.workspace
     try:
-        dept = Department.objects.select_related("team").get(id=id, team__workspace=workspace)
+        dept = Department.objects.select_related("team").get(
+            id=id, team__workspace=workspace, system_kind=""
+        )
     except Department.DoesNotExist:
         raise HttpError(404, "Department not found")
 

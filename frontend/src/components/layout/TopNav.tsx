@@ -38,6 +38,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   edit: "Edit",
   history: "History",
   members: "Members",
+  agents: "Agents",
   capture: "Capture",
   candidates: "Candidates",
   connectors: "Connectors",

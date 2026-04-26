@@ -6,7 +6,7 @@ import { KoinoflowAPIClient } from "./api-client.js";
 import { registerTools } from "./tools.js";
 
 const apiUrl = process.env.KOINOFLOW_API_URL;
-const apiKey = process.env.KOINOFLOW_API_KEY;
+const apiKey = process.env.KOINOFLOW_AGENT_TOKEN ?? process.env.KOINOFLOW_API_KEY;
 
 if (!apiUrl) {
   console.error(
@@ -17,7 +17,7 @@ if (!apiUrl) {
 }
 
 if (!apiKey) {
-  console.error("KOINOFLOW_API_KEY environment variable is required");
+  console.error("KOINOFLOW_AGENT_TOKEN or KOINOFLOW_API_KEY environment variable is required");
   process.exit(1);
 }
 

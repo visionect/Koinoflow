@@ -10,7 +10,7 @@ class OAuthTokenAuthentication(HttpBearer):
     """Validate OAuth 2.1 Bearer tokens issued by django-oauth-toolkit."""
 
     def authenticate(self, request, token: str):
-        if token.startswith("kf_"):
+        if token.startswith("kf_") or token.startswith("ag_"):
             return None
 
         try:
@@ -67,5 +67,37 @@ class ApiKeyAuthentication(HttpBearer):
         return api_key
 
 
+class AgentTokenAuthentication(HttpBearer):
+    def authenticate(self, request, token: str):
+        if not token.startswith("ag_"):
+            return None
+
+        from apps.agents.models import Agent
+        from apps.orgs.models import WorkspaceFeatureFlag
+
+        token_hash = Agent.hash_token(token)
+        try:
+            agent = Agent.objects.select_related("workspace").get(
+                token_hash=token_hash,
+                is_active=True,
+            )
+        except Agent.DoesNotExist:
+            return None
+
+        feature_enabled = WorkspaceFeatureFlag.objects.filter(
+            workspace=agent.workspace,
+            flag__name="agents",
+        ).exists()
+        if not feature_enabled:
+            return None
+
+        agent.last_used_at = timezone.now()
+        agent.save(update_fields=["last_used_at", "updated_at"])
+        request.workspace = agent.workspace
+        request.agent = agent
+        return agent
+
+
 api_key_only = ApiKeyAuthentication()
-api_or_session = [OAuthTokenAuthentication(), api_key_only, django_auth]
+agent_token_only = AgentTokenAuthentication()
+api_or_session = [agent_token_only, OAuthTokenAuthentication(), api_key_only, django_auth]
