@@ -1,7 +1,7 @@
 {
   "name": "@koinoflow/mcp",
   "version": "0.1.0",
-  "description": "MCP server for Koinoflow — access your organization's processes from AI clients",
+  "description": "MCP server for Koinoflow — access your organization's skills from AI clients",
   "main": "dist/index.js",
   "bin": {
     "koinoflow-mcp": "./dist/index.js"

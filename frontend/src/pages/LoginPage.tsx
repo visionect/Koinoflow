@@ -30,7 +30,7 @@ export function LoginPage() {
           <div className="space-y-2">
             <CardTitle className="text-3xl tracking-tight">Welcome to Koinoflow</CardTitle>
             <CardDescription className="text-sm leading-6">
-              Turn operational knowledge into production-ready processes your teams and AI clients
+              Turn operational knowledge into production-ready skills your teams and AI clients
               can trust.
             </CardDescription>
           </div>

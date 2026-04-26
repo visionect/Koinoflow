@@ -59,7 +59,7 @@ export function TeamListPage() {
     <div className="space-y-8">
       <PageHeader
         title="Teams"
-        description="Create the high-level organizational structure your departments and processes live under."
+        description="Create the high-level organizational structure your departments and skills live under."
         action={
           isEditor ? (
             <Button onClick={() => setOpen(true)}>
@@ -111,7 +111,7 @@ export function TeamListPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
-                  Organize process ownership, reporting lines, and review accountability.
+                  Organize skill ownership, reporting lines, and review accountability.
                 </CardContent>
               </Card>
             </Link>
@@ -120,7 +120,7 @@ export function TeamListPage() {
       ) : (
         <EmptyState
           title="No teams yet"
-          description="Create your first team to organize departments and processes in a way that matches the business."
+          description="Create your first team to organize departments and skills in a way that matches the business."
           action={
             isEditor ? (
               <Button onClick={() => setOpen(true)}>Create your first team</Button>
@@ -134,7 +134,7 @@ export function TeamListPage() {
           <DialogHeader>
             <DialogTitle>Create team</DialogTitle>
             <DialogDescription>
-              Create a workspace-level team grouping for departments and process ownership.
+              Create a workspace-level team grouping for departments and skill ownership.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">

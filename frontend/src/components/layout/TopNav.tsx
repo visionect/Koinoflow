@@ -30,7 +30,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar"
 const SEGMENT_LABELS: Record<string, string> = {
   teams: "Teams",
   depts: "Departments",
-  processes: "Processes",
+  skills: "Skills",
   settings: "Settings",
   mcp: "MCP",
   keys: "API keys",

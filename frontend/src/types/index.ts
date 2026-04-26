@@ -1,6 +1,6 @@
 export type WorkspaceRole = "admin" | "team_manager" | "member"
 export type ProcessStatus = "draft" | "published"
-export type ProcessVisibility = "department" | "team" | "workspace"
+export type SkillVisibility = "department" | "team" | "workspace"
 export type DiscoveryEmbeddingStatus = "not_applicable" | "pending" | "ready"
 export type ThemeMode = "light" | "dark" | "system"
 
@@ -73,7 +73,7 @@ export interface Department {
   team_slug: string
   team_name: string
   owner: User | null
-  process_count: number
+  skill_count: number
   created_at: string
 }
 
@@ -135,7 +135,7 @@ export const EMPTY_KOINOFLOW_METADATA: KoinoflowMetadata = {
   audience: [],
 }
 
-export interface ProcessVersion {
+export interface SkillVersion {
   id: string
   version_number: number
   content_md: string
@@ -148,7 +148,7 @@ export interface ProcessVersion {
   reverted_from_version_number: number | null
 }
 
-export interface ProcessVersionBrief {
+export interface SkillVersionBrief {
   id: string
   version_number: number
   change_summary: string
@@ -176,20 +176,20 @@ export interface DiffStats {
 }
 
 export interface VersionDiff {
-  old_version: ProcessVersionBrief
-  new_version: ProcessVersionBrief
+  old_version: SkillVersionBrief
+  new_version: SkillVersionBrief
   hunks: DiffHunk[]
   stats: DiffStats
   file_diff: FileDiffEntry[]
 }
 
-export interface Process {
+export interface Skill {
   id: string
   title: string
   slug: string
   description: string
   status: ProcessStatus
-  visibility: ProcessVisibility
+  visibility: SkillVisibility
   shared_with_ids: string[]
   department_slug: string
   department_name: string
@@ -207,13 +207,13 @@ export interface Process {
   updated_at: string
 }
 
-export interface ProcessDetail {
+export interface SkillDetail {
   id: string
   title: string
   slug: string
   description: string
   status: ProcessStatus
-  visibility: ProcessVisibility
+  visibility: SkillVisibility
   shared_with_ids: string[]
   is_shared_with_requester_team: boolean
   department_slug: string
@@ -221,7 +221,7 @@ export interface ProcessDetail {
   team_slug: string
   team_name: string
   owner: User | null
-  current_version: ProcessVersion | null
+  current_version: SkillVersion | null
   last_reviewed_at: string | null
   needs_audit: boolean
   discovery_embedding_status: DiscoveryEmbeddingStatus
@@ -245,7 +245,7 @@ export interface StalenessAlertRule {
   period_days: number
   notify_admins: boolean
   notify_team_managers: boolean
-  notify_process_owner: boolean
+  notify_skill_owner: boolean
   created_at: string
 }
 
@@ -254,21 +254,21 @@ export interface StalenessAlertRuleBrief {
   period_days: number
   notify_admins: boolean
   notify_team_managers: boolean
-  notify_process_owner: boolean
+  notify_skill_owner: boolean
 }
 
 export interface CreateStalenessAlertRuleInput {
   period_days: number
   notify_admins: boolean
   notify_team_managers: boolean
-  notify_process_owner: boolean
+  notify_skill_owner: boolean
 }
 
 export interface UpdateStalenessAlertRuleInput {
   period_days?: number
   notify_admins?: boolean
   notify_team_managers?: boolean
-  notify_process_owner?: boolean
+  notify_skill_owner?: boolean
 }
 
 export interface EffectiveSettings {
@@ -276,8 +276,8 @@ export interface EffectiveSettings {
   enable_version_history: boolean | null
   enable_api_access: boolean | null
   require_change_summary: boolean | null
-  allow_agent_process_updates: boolean | null
-  process_audit: ProcessAuditRuleBrief | null
+  allow_agent_skill_updates: boolean | null
+  skill_audit: ProcessAuditRuleBrief | null
   staleness_alert: StalenessAlertRuleBrief | null
 }
 
@@ -289,8 +289,8 @@ export interface UpsertSettingsInput {
   enable_version_history?: boolean | null
   enable_api_access?: boolean | null
   require_change_summary?: boolean | null
-  allow_agent_process_updates?: boolean | null
-  process_audit_id?: string | null
+  allow_agent_skill_updates?: boolean | null
+  skill_audit_id?: string | null
   staleness_alert_id?: string | null
 }
 
@@ -334,8 +334,8 @@ export interface CreatedApiKey {
 
 export interface UsageEvent {
   id: string
-  process_title: string
-  process_slug: string
+  skill_title: string
+  skill_slug: string
   version_number: number
   client_id: string
   client_type: string
@@ -343,9 +343,9 @@ export interface UsageEvent {
   called_at: string
 }
 
-export interface ProcessUsageSummary {
-  process_slug: string
-  process_title: string
+export interface SkillUsageSummary {
+  skill_slug: string
+  skill_title: string
   total_calls: number
   last_called_at: string | null
   unique_clients: number
@@ -387,21 +387,21 @@ export interface UpdateDepartmentInput {
   owner_id?: string | null
 }
 
-export interface CreateProcessInput {
+export interface CreateSkillInput {
   department_id: string
   title: string
   slug: string
   description?: string
   owner_id?: string | null
-  visibility?: ProcessVisibility
+  visibility?: SkillVisibility
   shared_with_ids?: string[]
 }
 
-export interface UpdateProcessInput {
+export interface UpdateSkillInput {
   title?: string
   description?: string
   owner_id?: string | null
-  visibility?: ProcessVisibility
+  visibility?: SkillVisibility
   shared_with_ids?: string[]
 }
 
@@ -431,7 +431,7 @@ export interface ProcessListFilters {
 }
 
 export interface UsageEventFilters {
-  process?: string
+  skill?: string
   client_type?: string
   days?: number
   limit?: number
@@ -445,8 +445,8 @@ export interface CoverageData {
 }
 
 export interface StaleReliedOn {
-  process_slug: string
-  process_title: string
+  skill_slug: string
+  skill_title: string
   days_since_review: number
   call_count: number
   owner_email: string | null
@@ -474,8 +474,8 @@ export interface UsageKpis {
 }
 
 export interface CoverageGap {
-  process_slug: string
-  process_title: string
+  skill_slug: string
+  skill_title: string
   owner_first_name: string | null
   days_since_published: number
 }
@@ -568,7 +568,7 @@ export interface CaptureCandidate {
   automation_reasoning: string
   integration_needs: IntegrationNeed[]
   status: CandidateStatus
-  promoted_process_slug: string | null
+  promoted_skill_slug: string | null
   sources: CandidateSourceBrief[] | null
   created_at: string
 }
@@ -632,7 +632,7 @@ export interface McpConnectionScopeInput {
   department_ids?: string[]
 }
 
-export interface ProcessFrontmatter {
+export interface SkillFrontmatter {
   name: string
   description: string
   tags: string[]

@@ -7,7 +7,7 @@ from .models import (
     Department,
     FeatureFlag,
     Membership,
-    ProcessAuditRule,
+    SkillAuditRule,
     Team,
     Workspace,
     WorkspaceFeatureFlag,
@@ -51,8 +51,8 @@ class CoreSlugAdmin(admin.ModelAdmin):
     search_fields = ("slug",)
 
 
-@admin.register(ProcessAuditRule)
-class ProcessAuditRuleAdmin(admin.ModelAdmin):
+@admin.register(SkillAuditRule)
+class SkillAuditRuleAdmin(admin.ModelAdmin):
     list_display = ("workspace", "period_days", "created_at")
 
 
@@ -63,7 +63,7 @@ class CoreSettingsAdmin(admin.ModelAdmin):
         "require_review_before_publish",
         "enable_version_history",
         "enable_api_access",
-        "allow_agent_process_updates",
+        "allow_agent_skill_updates",
     )
 
 

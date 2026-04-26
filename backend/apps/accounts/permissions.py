@@ -64,23 +64,28 @@ def get_writable_dept_ids(request):
     return set(str(pk) for pk in source.departments.values_list("id", flat=True))
 
 
-def check_process_write(request, process):
-    """Raises HttpError(403) if the requester cannot write to the given process.
+def check_skill_write(request, skill):
+    """Raises HttpError(403) if the requester cannot write to the given skill.
 
-    Workspace-wide processes are admin-only regardless of department membership.
+    Workspace-wide skills are admin-only regardless of department membership.
+    OAuth tokens are allowed if they carry skills:write scope (already verified before this call).
     """
-    from apps.processes.enums import VisibilityChoices
+    from apps.skills.enums import VisibilityChoices
 
-    if process.visibility == VisibilityChoices.WORKSPACE:
+    # OAuth connections handle their own scope/connection checks separately
+    if getattr(request, "oauth_token", None) is not None:
+        return
+
+    if skill.visibility == VisibilityChoices.WORKSPACE:
         source = _role_source(request)
         if source is None or source.role != RoleChoices.ADMIN:
-            raise HttpError(403, "Only admins can modify workspace-wide processes")
+            raise HttpError(403, "Only admins can modify workspace-wide skills")
         return
     writable = get_writable_dept_ids(request)
     if writable is None:
         return
-    if str(process.department_id) not in writable:
-        raise HttpError(403, "Insufficient permissions for this process")
+    if str(skill.department_id) not in writable:
+        raise HttpError(403, "Insufficient permissions for this skill")
 
 
 def check_dept_write(request, department):
@@ -97,8 +102,8 @@ def check_dept_write(request, department):
 
 def apply_api_key_scope(api_key, qs):
     """
-    Narrows a published-only Process queryset to the API key's role scope,
-    respecting the process visibility field.
+    Narrows a published-only Skill queryset to the API key's role scope,
+    respecting the skill visibility field.
     Call this only for API key requests (after filtering to published).
     """
     from django.db.models import Q
@@ -131,7 +136,7 @@ def apply_api_key_scope(api_key, qs):
 
 def apply_oauth_connection_scope(request, qs):
     """
-    Narrow a Process queryset based on the MCP connection's voluntary scope.
+    Narrow a Skill queryset based on the MCP connection's voluntary scope.
 
     Only applies to OAuth-authenticated requests. The scope can only restrict
     visibility below the user's role, never widen it. Membership role-based

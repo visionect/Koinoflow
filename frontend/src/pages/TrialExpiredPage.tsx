@@ -34,7 +34,7 @@ export function TrialExpiredPage() {
             </CardTitle>
             <CardDescription className="text-sm leading-6">
               Your free trial has ended. We hope you found value in building and sharing your
-              operational processes. To keep using Koinoflow, choose a plan or talk to us about the
+              operational skills. To keep using Koinoflow, choose a plan or talk to us about the
               right fit for your team.
             </CardDescription>
           </div>

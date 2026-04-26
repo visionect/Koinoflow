@@ -30,7 +30,7 @@ is strictly required to accurately describe the origin of the software.
 
 ## Suggested naming for forks and derivatives
 
-- Good: *"Acme Flow, based on Koinoflow"*, *"MyOrg Processes (fork of
+- Good: *"Acme Flow, based on Koinoflow"*, *"MyOrg Skills (fork of
   Koinoflow)"*.
 - Not good: *"Koinoflow Enterprise"*, *"Koinoflow Pro"*, *"Koinoflow
   Cloud by MyOrg"*.

@@ -171,7 +171,7 @@ export function ConnectorsPage() {
                       ? "Extracting…"
                       : confluence.changed_pages_count > 0
                         ? `Extract (${confluence.changed_pages_count} changed)`
-                        : "Extract processes"}
+                        : "Extract skills"}
                   </Button>
                 )}
                 <Button
@@ -343,7 +343,7 @@ function ReadyForExtractionBanner({
         <div className="min-w-0 space-y-0.5">
           <p className="text-sm font-medium text-foreground">Capture ready — run extraction</p>
           <p className="text-sm text-muted-foreground">
-            {pageLabel} with new or updated content. Extract processes to score pages and create
+            {pageLabel} with new or updated content. Extract skills to score pages and create
             candidates.
           </p>
         </div>
@@ -369,7 +369,7 @@ function ExtractionProgress({ job }: { job: import("@/types").ExtractionJob | un
     if (job.pages_scored === 0) {
       message = "Scoring pages…"
     } else if (job.pages_extracted === 0) {
-      message = `Scored ${job.pages_scored} pages · extracting processes…`
+      message = `Scored ${job.pages_scored} pages · extracting skills…`
     } else {
       message = `Extracted from ${job.pages_extracted} pages · found ${job.candidates_created} candidates so far…`
     }

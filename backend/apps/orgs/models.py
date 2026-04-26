@@ -253,7 +253,7 @@ def create_slug(entity_type: str, entity_id, slug: str, **scope):
 # ── ProcessAuditRule ────────────────────────────────────────────────────
 
 
-class ProcessAuditRule(BaseModel):
+class SkillAuditRule(BaseModel):
     workspace = models.ForeignKey(
         Workspace,
         on_delete=models.CASCADE,
@@ -262,7 +262,7 @@ class ProcessAuditRule(BaseModel):
     period_days = models.PositiveIntegerField()
 
     class Meta:
-        db_table = "process_audit_rule"
+        db_table = "skill_audit_rule"
 
     def __str__(self):
         return f"Audit every {self.period_days} days"
@@ -277,7 +277,7 @@ class StalenessAlertRule(BaseModel):
     period_days = models.PositiveIntegerField()
     notify_admins = models.BooleanField(default=True)
     notify_team_managers = models.BooleanField(default=False)
-    notify_process_owner = models.BooleanField(default=True)
+    notify_skill_owner = models.BooleanField(default=True)
 
     class Meta:
         db_table = "staleness_alert_rule"
@@ -314,9 +314,9 @@ class CoreSettings(BaseModel):
     enable_version_history = models.BooleanField(null=True, default=None)
     enable_api_access = models.BooleanField(null=True, default=None)
     require_change_summary = models.BooleanField(null=True, default=None)
-    allow_agent_process_updates = models.BooleanField(null=True, default=None)
-    process_audit = models.ForeignKey(
-        ProcessAuditRule,
+    allow_agent_skill_updates = models.BooleanField(null=True, default=None)
+    skill_audit = models.ForeignKey(
+        SkillAuditRule,
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -376,11 +376,11 @@ SETTINGS_FIELDS = [
     "enable_version_history",
     "enable_api_access",
     "require_change_summary",
-    "allow_agent_process_updates",
+    "allow_agent_skill_updates",
 ]
 
 FK_SETTINGS_FIELDS = [
-    "process_audit",
+    "skill_audit",
     "staleness_alert",
 ]
 
@@ -390,7 +390,7 @@ def get_effective_settings(workspace_id, team_id=None, department_id=None):
     Resolve settings with most-specific-wins inheritance.
 
     Boolean fields: first non-None wins (dept -> team -> workspace).
-    FK fields (like process_audit): first non-null FK wins, returned as
+    FK fields (like skill_audit): first non-null FK wins, returned as
     the related object (or None).
     """
     filters = Q(workspace_id=workspace_id, team__isnull=True, department__isnull=True)

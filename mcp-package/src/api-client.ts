@@ -22,7 +22,7 @@ export interface KoinoflowMetadata {
   audience?: string[];
 }
 
-interface ProcessVersionOut {
+interface SkillVersionOut {
   id?: string;
   version_number: number;
   content_md: string;
@@ -32,16 +32,16 @@ interface ProcessVersionOut {
   koinoflow_metadata?: KoinoflowMetadata;
 }
 
-export interface ProcessDetail {
+export interface SkillDetail {
   id: string;
   title: string;
   slug: string;
   description: string;
   status: string;
-  current_version: ProcessVersionOut | null;
+  current_version: SkillVersionOut | null;
 }
 
-export interface ProcessListItem {
+export interface SkillListItem {
   title: string;
   slug: string;
   description: string;
@@ -53,12 +53,12 @@ export interface ProcessListItem {
   requires_human_approval?: boolean;
 }
 
-export interface ProcessListResponse {
-  items: ProcessListItem[];
+export interface SkillListResponse {
+  items: SkillListItem[];
   count: number;
 }
 
-export interface ProcessDiscoveryItem {
+export interface SkillDiscoveryItem {
   id: string;
   title: string;
   slug: string;
@@ -77,8 +77,8 @@ export interface ProcessDiscoveryItem {
   indexed: boolean;
 }
 
-export interface ProcessDiscoveryResponse {
-  items: ProcessDiscoveryItem[];
+export interface SkillDiscoveryResponse {
+  items: SkillDiscoveryItem[];
   count: number;
   embedding_status: string;
 }
@@ -114,34 +114,34 @@ export class KoinoflowAPIClient {
     return response.json() as Promise<T>;
   }
 
-  async getProcess(
+  async getSkill(
     slug: string,
     version?: number,
-  ): Promise<ProcessDetail | ProcessVersionOut> {
+  ): Promise<SkillDetail | SkillVersionOut> {
     const path =
       version !== undefined
-        ? `/processes/${slug}/versions/${version}`
-        : `/processes/${slug}`;
-    return this.request<ProcessDetail | ProcessVersionOut>(path);
+        ? `/skills/${slug}/versions/${version}`
+        : `/skills/${slug}`;
+    return this.request<SkillDetail | SkillVersionOut>(path);
   }
 
-  async getProcessFile(
+  async getSkillFile(
     slug: string,
     version: number,
     path: string,
   ): Promise<VersionFileDetailOut> {
     return this.request<VersionFileDetailOut>(
-      `/processes/${slug}/versions/${version}/files/${encodeURIComponent(path)}`,
+      `/skills/${slug}/versions/${version}/files/${encodeURIComponent(path)}`,
     );
   }
 
-  async listProcesses(
+  async listSkills(
     department?: string,
     team?: string,
     search?: string,
     limit: number = 100,
     offset: number = 0,
-  ): Promise<ProcessListResponse> {
+  ): Promise<SkillListResponse> {
     const params: Record<string, string> = {
       status: "published",
       limit: String(Math.min(Math.max(limit, 1), 100)),
@@ -150,26 +150,26 @@ export class KoinoflowAPIClient {
     if (department) params.department = department;
     if (team) params.team = team;
     if (search) params.search = search;
-    return this.request<ProcessListResponse>("/processes", params);
+    return this.request<SkillListResponse>("/skills", params);
   }
 
-  async discoverProcesses(
+  async discoverSkills(
     query: string,
     department?: string,
     team?: string,
     limit: number = 10,
-  ): Promise<ProcessDiscoveryResponse> {
+  ): Promise<SkillDiscoveryResponse> {
     const params: Record<string, string> = {
       query,
       limit: String(Math.min(Math.max(limit, 1), 25)),
     };
     if (department) params.department = department;
     if (team) params.team = team;
-    return this.request<ProcessDiscoveryResponse>("/processes/discover", params);
+    return this.request<SkillDiscoveryResponse>("/skills/discover", params);
   }
 
   async logUsage(
-    processId: string,
+    skillId: string,
     versionNumber: number,
     clientId: string,
     clientType: string,
@@ -182,7 +182,7 @@ export class KoinoflowAPIClient {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          process_id: processId,
+          skill_id: skillId,
           version_number: versionNumber,
           client_id: clientId,
           client_type: clientType,
@@ -193,14 +193,14 @@ export class KoinoflowAPIClient {
     }
   }
 
-  async createProcessVersion(
+  async createSkillVersion(
     slug: string,
     payload: {
       content_md: string;
       frontmatter_yaml: string;
       change_summary: string;
     },
-  ): Promise<ProcessVersionOut> {
+  ): Promise<SkillVersionOut> {
     const response = await fetch(`${this.baseUrl}/processes/${slug}/versions`, {
       method: "POST",
       headers: {
@@ -214,6 +214,6 @@ export class KoinoflowAPIClient {
       throw new Error(`API error ${response.status}: ${await response.text()}`);
     }
 
-    return (await response.json()) as ProcessVersionOut;
+    return (await response.json()) as SkillVersionOut;
   }
 }

@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('orgs', '0001_initial'),
-        ('processes', '0001_initial'),
+        ('skills', '0001_initial'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -57,7 +57,7 @@ class Migration(migrations.Migration):
                 ('integration_needs', models.JSONField(default=list)),
                 ('grounding_sources', models.JSONField(blank=True, default=list, help_text='Web sources cited by the LLM during grounded extraction (uri, title).')),
                 ('status', models.CharField(choices=[('pending', 'Pending review'), ('promoted', 'Promoted to process'), ('dismissed', 'Dismissed')], default='pending', max_length=20)),
-                ('promoted_process', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='capture_candidates', to='processes.process')),
+                ('promoted_skill', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='capture_candidates', to='skills.skill')),
                 ('credential', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='capture_candidates', to='connectors.connectorcredential')),
             ],
             options={

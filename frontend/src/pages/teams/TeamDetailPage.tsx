@@ -202,7 +202,7 @@ export function TeamDetailPage() {
                       <CardTitle>{department.name}</CardTitle>
                       <CardDescription>Owner: {getDisplayName(department.owner)}</CardDescription>
                     </div>
-                    <Badge variant="secondary">{department.process_count} processes</Badge>
+                    <Badge variant="secondary">{department.skill_count} skills</Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="text-sm text-muted-foreground">
@@ -216,7 +216,7 @@ export function TeamDetailPage() {
       ) : (
         <EmptyState
           title="No departments in this team"
-          description="Add a department to start organizing ownership and create process spaces."
+          description="Add a department to start organizing ownership and create skill spaces."
           action={
             isEditor ? (
               <Button onClick={() => setCreateOpen(true)}>Add department</Button>
@@ -258,7 +258,7 @@ export function TeamDetailPage() {
           <DialogHeader>
             <DialogTitle>Create department</DialogTitle>
             <DialogDescription>
-              Departments define process ownership and keep operational documentation tidy.
+              Departments define skill ownership and keep operational documentation tidy.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -323,7 +323,7 @@ export function TeamDetailPage() {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         entityName={teamQuery.data.name}
-        description="This permanently removes the team, every department inside it, and every process attached to those departments."
+        description="This permanently removes the team, every department inside it, and every skill attached to those departments."
         pending={deleteTeam.isPending}
         onConfirm={handleDeleteTeam}
       />

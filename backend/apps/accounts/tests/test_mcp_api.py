@@ -18,7 +18,7 @@ def _create_oauth_app(name="Test MCP Client"):
     )
 
 
-def _create_access_token(app, user, scope="processes:read processes:write", expired=False):
+def _create_access_token(app, user, scope="skills:read skills:write", expired=False):
     expires = timezone.now() + (timedelta(hours=-1) if expired else timedelta(hours=1))
     return AccessToken.objects.create(
         user=user,

@@ -88,7 +88,7 @@ export function OnboardingPage() {
         <CardHeader>
           <CardTitle>Create your workspace</CardTitle>
           <CardDescription>
-            Set up the shared home for your teams, processes, and API integrations.
+            Set up the shared home for your teams, skills, and API integrations.
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -78,9 +78,9 @@ const PRIMARY_LINKS = [
     href: "",
   },
   {
-    label: "All Processes",
+    label: "All Skills",
     icon: FileTextIcon,
-    href: "/processes",
+    href: "/skills",
   },
   {
     label: "Analytics",
@@ -92,7 +92,7 @@ const PRIMARY_LINKS = [
 const CAPTURE_LINKS = [
   {
     label: "Connectors",
-    tooltip: "Connect chat and doc sources so Capture can propose new processes.",
+    tooltip: "Connect chat and doc sources so Capture can propose new skills.",
     icon: PlugZapIcon,
     href: "/capture/connectors",
   },

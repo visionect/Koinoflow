@@ -1,9 +1,9 @@
 import yaml from "js-yaml"
 
-import type { ProcessFrontmatter } from "@/types"
+import type { SkillFrontmatter } from "@/types"
 
 /**
- * Parse YAML frontmatter into the ProcessFrontmatter shape.
+ * Parse YAML frontmatter into the SkillFrontmatter shape.
  *
  * All unknown top-level keys (including Claude-compat fields like
  * `allowed-tools`, `model`, `effort`, `paths`, `disable-model-invocation`,
@@ -12,9 +12,9 @@ import type { ProcessFrontmatter } from "@/types"
  */
 export function parseFrontmatter(
   yamlString: string,
-  defaults?: Partial<ProcessFrontmatter>,
-): ProcessFrontmatter {
-  const fallback: ProcessFrontmatter = {
+  defaults?: Partial<SkillFrontmatter>,
+): SkillFrontmatter {
+  const fallback: SkillFrontmatter = {
     name: defaults?.name ?? "",
     description: defaults?.description ?? "",
     tags: defaults?.tags ?? [],
@@ -38,13 +38,13 @@ export function parseFrontmatter(
 }
 
 /**
- * Serialize a ProcessFrontmatter back to YAML.
+ * Serialize a SkillFrontmatter back to YAML.
  *
  * Preserves every key present on the input (including Claude-compat fields and
  * any other unknown keys carried over from import). This is essential for
  * lossless `.skill` round-trip.
  */
-export function serializeFrontmatter(frontmatter: ProcessFrontmatter) {
+export function serializeFrontmatter(frontmatter: SkillFrontmatter) {
   const clean: Record<string, unknown> = {}
 
   for (const [key, value] of Object.entries(frontmatter)) {
@@ -58,7 +58,7 @@ export function serializeFrontmatter(frontmatter: ProcessFrontmatter) {
 }
 
 export function parseSkillMd(fileContent: string): {
-  frontmatter: ProcessFrontmatter
+  frontmatter: SkillFrontmatter
   content: string
 } {
   const fmRegex = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/
@@ -77,7 +77,7 @@ export function parseSkillMd(fileContent: string): {
   }
 }
 
-export function toSkillMd(frontmatter: ProcessFrontmatter, content: string): string {
+export function toSkillMd(frontmatter: SkillFrontmatter, content: string): string {
   const fm = serializeFrontmatter(frontmatter)
   return `---\n${fm}\n---\n\n${content}\n`
 }

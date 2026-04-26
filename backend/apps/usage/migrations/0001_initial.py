@@ -111,7 +111,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('processes', '0001_initial'),
+        ('skills', '0001_initial'),
     ]
 
     operations = [
@@ -123,7 +123,7 @@ class Migration(migrations.Migration):
                 ('client_id', models.CharField(default='unknown', max_length=255)),
                 ('client_type', models.CharField(default='unknown', max_length=100)),
                 ('called_at', models.DateTimeField(auto_now_add=True)),
-                ('process', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='usage_events', to='processes.process')),
+                ('process', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='usage_events', to='skills.skill')),
                 ('tool_name', models.CharField(blank=True, default='', max_length=100)),
             ],
             options={

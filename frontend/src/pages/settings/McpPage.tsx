@@ -52,17 +52,17 @@ const MCP_SERVER_URL = import.meta.env.VITE_MCP_SERVER_URL ?? "http://localhost:
 const MCP_DOCS_URL = "https://modelcontextprotocol.io/docs/clients"
 
 const SCOPE_LABELS: Record<string, { label: string; description: string }> = {
-  "processes:read": {
-    label: "Read processes",
-    description: "Discover and fetch approved processes in the workspace.",
+  "skills:read": {
+    label: "Read skills",
+    description: "Discover and fetch approved skills in the workspace.",
   },
-  "processes:write": {
-    label: "Edit processes",
-    description: "Create new processes and push new versions.",
+  "skills:write": {
+    label: "Edit skills",
+    description: "Create new skills and push new versions.",
   },
   "usage:write": {
     label: "Log usage",
-    description: "Record which processes this client invoked (for analytics).",
+    description: "Record which skills this client invoked (for analytics).",
   },
 }
 
@@ -108,7 +108,7 @@ function buildTeammateInstructions(workspaceName: string | undefined, snippet: s
   const name = workspaceName ?? "our workspace"
   return `# Connecting to Koinoflow MCP
 
-Koinoflow exposes ${name}'s processes as an MCP server so your AI client (Cursor, Claude Desktop, Windsurf, etc.) can read and search them.
+Koinoflow exposes ${name}'s skills as an MCP server so your AI client (Cursor, Claude Desktop, Windsurf, etc.) can read and search them.
 
 ## 1. Add this config to your MCP client
 
@@ -131,7 +131,7 @@ function ScopeBadge({ connection }: { connection: McpConnection }) {
   if (!scope || scope.scope_type === "workspace") {
     return (
       <Badge variant="outline" className="text-xs">
-        All processes
+        All skills
       </Badge>
     )
   }
@@ -218,7 +218,7 @@ function ScopeEditorDialog({
         team_id: scopeType === "team" ? teamId : null,
         department_ids: scopeType === "department" ? departmentIds : [],
       })
-      toast.success("Process scope updated")
+      toast.success("Skill scope updated")
       onOpenChange(false)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update scope")
@@ -250,9 +250,9 @@ function ScopeEditorDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Process scope — {connection.client_name}</DialogTitle>
+          <DialogTitle>Skill scope — {connection.client_name}</DialogTitle>
           <DialogDescription>
-            Choose which processes this MCP connection can access. This narrows visibility below
+            Choose which skills this MCP connection can access. This narrows visibility below
             your role-level permissions.
           </DialogDescription>
         </DialogHeader>
@@ -262,7 +262,7 @@ function ScopeEditorDialog({
             <div className="flex items-center gap-2">
               <RadioGroupItem value="workspace" id="scope-workspace" />
               <Label htmlFor="scope-workspace" className="font-normal">
-                All processes (workspace-wide)
+                All skills (workspace-wide)
               </Label>
             </div>
             <div className="flex items-center gap-2">
@@ -386,7 +386,7 @@ export function McpPage() {
     <div className="space-y-8">
       <PageHeader
         title="MCP"
-        description="Connect AI clients to your workspace processes via the Model Context Protocol."
+        description="Connect AI clients to your workspace skills via the Model Context Protocol."
       />
 
       <Card>
@@ -485,7 +485,7 @@ export function McpPage() {
                   <TableHead>Client</TableHead>
                   <TableHead>User</TableHead>
                   <TableHead>Scopes</TableHead>
-                  <TableHead>Process scope</TableHead>
+                  <TableHead>Skill scope</TableHead>
                   <TableHead>Connected</TableHead>
                   <TableHead>Last active</TableHead>
                   <TableHead>Status</TableHead>

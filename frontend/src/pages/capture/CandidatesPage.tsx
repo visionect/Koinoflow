@@ -110,7 +110,7 @@ export function CandidatesPage() {
       <div className="space-y-6">
         <PageHeader
           title="Candidates"
-          description="AI-extracted process candidates from your documentation sources."
+          description="AI-extracted skill candidates from your documentation sources."
         />
         <EmptyState
           title="No connectors yet"
@@ -126,7 +126,7 @@ export function CandidatesPage() {
     <div className="space-y-6">
       <PageHeader
         title="Candidates"
-        description="Review AI-extracted process candidates and promote them to your process library."
+        description="Review AI-extracted skill candidates and promote them to your skill library."
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -277,9 +277,9 @@ export function CandidatesPage() {
           candidate={promoteTarget}
           credentialId={confluenceConnector.id}
           onClose={() => setPromoteTarget(null)}
-          onSuccess={(processSlug) => {
+          onSuccess={(skillSlug) => {
             setPromoteTarget(null)
-            navigate(buildWorkspacePath(workspace, `/processes/${processSlug}`))
+            navigate(buildWorkspacePath(workspace, `/skills/${skillSlug}`))
           }}
         />
       )}
@@ -308,7 +308,7 @@ function PromoteDialog({
   candidate: CaptureCandidate
   credentialId: string
   onClose: () => void
-  onSuccess: (processSlug: string) => void
+  onSuccess: (skillSlug: string) => void
 }) {
   const { data: departments = [] } = useDepartments()
   const { data: members = [] } = useWorkspaceMembers()
@@ -333,8 +333,8 @@ function PromoteDialog({
         candidateId: candidate.id,
         payload,
       })
-      toast.success("Process created")
-      onSuccess(result.process_slug)
+      toast.success("Skill created")
+      onSuccess(result.skill_slug)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to promote candidate")
     }
@@ -344,10 +344,10 @@ function PromoteDialog({
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Promote to process</DialogTitle>
+          <DialogTitle>Promote to skill</DialogTitle>
           <DialogDescription>
-            Creates a draft process from the AI-extracted content. You can review and publish it
-            from the process view.
+            Creates a draft skill from the AI-extracted content. You can review and publish it
+            from the skill view.
           </DialogDescription>
         </DialogHeader>
 
@@ -409,7 +409,7 @@ function PromoteDialog({
             disabled={!departmentId || !title.trim() || promote.isPending}
             onClick={() => void handlePromote()}
           >
-            {promote.isPending ? "Creating…" : "Create process"}
+            {promote.isPending ? "Creating…" : "Create skill"}
           </Button>
         </DialogFooter>
       </DialogContent>

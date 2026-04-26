@@ -11,7 +11,7 @@ from apps.orgs.models import (
     Department,
     Membership,
     PendingInvitation,
-    ProcessAuditRule,
+    SkillAuditRule,
     StalenessAlertRule,
     Team,
     Workspace,
@@ -91,9 +91,9 @@ class DepartmentFactory(factory.django.DjangoModelFactory):
         return obj
 
 
-class ProcessAuditRuleFactory(factory.django.DjangoModelFactory):
+class SkillAuditRuleFactory(factory.django.DjangoModelFactory):
     class Meta:
-        model = ProcessAuditRule
+        model = SkillAuditRule
 
     workspace = factory.SubFactory(WorkspaceFactory)
     period_days = 90
@@ -107,7 +107,7 @@ class StalenessAlertRuleFactory(factory.django.DjangoModelFactory):
     period_days = 30
     notify_admins = True
     notify_team_managers = False
-    notify_process_owner = True
+    notify_skill_owner = True
 
 
 class CoreSettingsFactory(factory.django.DjangoModelFactory):
@@ -115,8 +115,8 @@ class CoreSettingsFactory(factory.django.DjangoModelFactory):
         model = CoreSettings
 
     workspace = factory.SubFactory(WorkspaceFactory)
-    process_audit = factory.SubFactory(
-        ProcessAuditRuleFactory,
+    skill_audit = factory.SubFactory(
+        SkillAuditRuleFactory,
         workspace=factory.SelfAttribute("..workspace"),
     )
 

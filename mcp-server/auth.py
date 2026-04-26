@@ -33,7 +33,7 @@ def get_protected_resource_metadata() -> dict:
     return {
         "resource": MCP_SERVER_URL,
         "authorization_servers": [AUTHORIZATION_SERVER_URL],
-        "scopes_supported": ["processes:read", "processes:write", "usage:write"],
+        "scopes_supported": ["skills:read", "skills:write", "usage:write"],
         "bearer_methods_supported": ["header"],
         "resource_documentation": f"{AUTHORIZATION_SERVER_URL}/api/docs",
     }

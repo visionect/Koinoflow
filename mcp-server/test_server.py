@@ -13,11 +13,11 @@ os.environ.setdefault("MCP_APPROVAL_TOKEN_SECRET", "test-approval-secret")
 from server import (  # noqa: E402
     _mcp_client_type,
     _token_info_var,
-    apply_process_update,
-    discover_processes,
-    list_processes,
-    propose_process_update,
-    read_process,
+    apply_skill_update,
+    discover_skills,
+    list_skills,
+    propose_skill_update,
+    read_skill,
 )
 
 PROCESS_DETAIL = {
@@ -154,7 +154,7 @@ PROCESS_DISCOVERY = {
 }
 
 
-def _set_token_scope(scope: str = "processes:read processes:write usage:write") -> None:
+def _set_token_scope(scope: str = "skills:read skills:write usage:write") -> None:
     _token_info_var.set(
         {
             "_raw_token": "oauth-token",
@@ -181,14 +181,14 @@ def _make_ctx(client_name: str | None = None, version: str | None = None):
 
 
 @respx.mock
-async def test_read_process_returns_markdown():
+async def test_read_skill_returns_markdown():
     _set_token_scope()
-    respx.get("http://testserver/api/v1/processes/deploy-to-production").mock(
+    respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL)
     )
     respx.post("http://testserver/api/v1/usage").mock(return_value=Response(200, json={"ok": True}))
 
-    result = await read_process(slug="deploy-to-production", ctx=_make_ctx())
+    result = await read_skill(slug="deploy-to-production", ctx=_make_ctx())
 
     assert "## Step 1" in result
     assert "Run the deploy script." in result
@@ -205,14 +205,14 @@ def test_mcp_client_type_falls_back_for_unknown_client():
 
 
 @respx.mock
-async def test_read_process_with_frontmatter():
+async def test_read_skill_with_frontmatter():
     _set_token_scope()
-    respx.get("http://testserver/api/v1/processes/deploy-to-production").mock(
+    respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL_WITH_FRONTMATTER)
     )
     respx.post("http://testserver/api/v1/usage").mock(return_value=Response(200, json={"ok": True}))
 
-    result = await read_process(slug="deploy-to-production", ctx=_make_ctx())
+    result = await read_skill(slug="deploy-to-production", ctx=_make_ctx())
 
     assert result.startswith("---\n")
     assert "owner: platform-team" in result
@@ -222,14 +222,14 @@ async def test_read_process_with_frontmatter():
 
 
 @respx.mock
-async def test_read_process_lists_support_files_by_default():
+async def test_read_skill_lists_support_files_by_default():
     _set_token_scope()
-    respx.get("http://testserver/api/v1/processes/deploy-to-production").mock(
+    respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL_WITH_FILES)
     )
     respx.post("http://testserver/api/v1/usage").mock(return_value=Response(200, json={"ok": True}))
 
-    result = await read_process(slug="deploy-to-production", ctx=_make_ctx())
+    result = await read_skill(slug="deploy-to-production", ctx=_make_ctx())
 
     assert "## Support Files (2 files)" in result
     assert "- scripts/deploy.sh (shell, 2.5 KB)" in result
@@ -237,14 +237,14 @@ async def test_read_process_lists_support_files_by_default():
 
 
 @respx.mock
-async def test_read_process_can_skip_support_file_manifest():
+async def test_read_skill_can_skip_support_file_manifest():
     _set_token_scope()
-    respx.get("http://testserver/api/v1/processes/deploy-to-production").mock(
+    respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL_WITH_FILES)
     )
     respx.post("http://testserver/api/v1/usage").mock(return_value=Response(200, json={"ok": True}))
 
-    result = await read_process(
+    result = await read_skill(
         slug="deploy-to-production",
         ctx=_make_ctx(),
         include_files=False,
@@ -255,13 +255,11 @@ async def test_read_process_can_skip_support_file_manifest():
 
 
 @respx.mock
-async def test_list_processes_formats_output():
+async def test_list_skills_formats_output():
     _set_token_scope()
-    respx.get("http://testserver/api/v1/processes").mock(
-        return_value=Response(200, json=PROCESS_LIST)
-    )
+    respx.get("http://testserver/api/v1/skills").mock(return_value=Response(200, json=PROCESS_LIST))
 
-    result = await list_processes()
+    result = await list_skills()
 
     assert "Showing 1–2 of 2 processes" in result
     assert "**Deploy to Production**" in result
@@ -273,13 +271,13 @@ async def test_list_processes_formats_output():
 
 
 @respx.mock
-async def test_discover_processes_formats_ranked_output():
+async def test_discover_skills_formats_ranked_output():
     _set_token_scope()
-    route = respx.get("http://testserver/api/v1/processes/discover").mock(
+    route = respx.get("http://testserver/api/v1/skills/discover").mock(
         return_value=Response(200, json=PROCESS_DISCOVERY)
     )
 
-    result = await discover_processes(query="ship production", limit=5)
+    result = await discover_skills(query="ship production", limit=5)
 
     assert route.called
     assert route.calls[0].request.url.params["query"] == "ship production"
@@ -291,32 +289,32 @@ async def test_discover_processes_formats_ranked_output():
     assert "[risk: high]" in result
     assert "[needs approval]" in result
     assert "semantic similarity 0.95" in result
-    assert "Call read_process" in result
+    assert "Call read_skill" in result
 
 
 @respx.mock
-async def test_list_processes_empty():
+async def test_list_skills_empty():
     _set_token_scope()
-    respx.get("http://testserver/api/v1/processes").mock(
+    respx.get("http://testserver/api/v1/skills").mock(
         return_value=Response(200, json={"items": [], "count": 0})
     )
 
-    result = await list_processes()
+    result = await list_skills()
 
     assert result == "No processes found."
 
 
 @respx.mock
-async def test_read_process_logs_usage():
+async def test_read_skill_logs_usage():
     _set_token_scope()
-    respx.get("http://testserver/api/v1/processes/deploy-to-production").mock(
+    respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL)
     )
     usage_route = respx.post("http://testserver/api/v1/usage").mock(
         return_value=Response(200, json={"ok": True})
     )
 
-    await read_process(slug="deploy-to-production", ctx=_make_ctx())
+    await read_skill(slug="deploy-to-production", ctx=_make_ctx())
 
     import asyncio
 
@@ -327,30 +325,30 @@ async def test_read_process_logs_usage():
     import json
 
     body = json.loads(call.request.content)
-    assert body["process_id"] == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    assert body["skill_id"] == "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     assert body["version_number"] == 3
     assert body["client_id"] == "mcp-remote"
     assert body["client_type"] == "MCP"
 
 
 @respx.mock
-async def test_propose_process_update_returns_suggestions_and_token():
+async def test_propose_skill_update_returns_suggestions_and_token():
     _set_token_scope()
     respx.get("http://testserver/api/v1/settings").mock(
         return_value=Response(200, json={"allow_agent_process_updates": True})
     )
-    respx.get("http://testserver/api/v1/processes/deploy-to-production").mock(
+    respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL_WITH_FRONTMATTER)
     )
 
-    result = await propose_process_update(
+    result = await propose_skill_update(
         slug="deploy-to-production",
         proposed_markdown="Run deploy script.",
         change_summary="Clarify deployment step.",
     )
     payload = json.loads(result)
 
-    assert payload["process_slug"] == "deploy-to-production"
+    assert payload["skill_slug"] == "deploy-to-production"
     assert payload["requires_user_approval"] is True
     assert payload["approval_token"]
     assert payload["approval_expires_at_epoch"] > int(time.time())
@@ -359,24 +357,24 @@ async def test_propose_process_update_returns_suggestions_and_token():
 
 
 @respx.mock
-async def test_apply_process_update_requires_write_scope():
-    _set_token_scope("processes:read usage:write")
+async def test_apply_skill_update_requires_write_scope():
+    _set_token_scope("skills:read usage:write")
     respx.get("http://testserver/api/v1/settings").mock(
         return_value=Response(200, json={"allow_agent_process_updates": True})
     )
-    respx.get("http://testserver/api/v1/processes/deploy-to-production").mock(
+    respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL)
     )
 
     proposal = json.loads(
-        await propose_process_update(
+        await propose_skill_update(
             slug="deploy-to-production",
             proposed_markdown="## Steps\n\n1. Run deploy script.",
             change_summary="Refine structure.",
         )
     )
 
-    result = await apply_process_update(
+    result = await apply_skill_update(
         slug="deploy-to-production",
         proposed_markdown="## Steps\n\n1. Run deploy script.",
         change_summary="Refine structure.",
@@ -386,17 +384,15 @@ async def test_apply_process_update_requires_write_scope():
 
 
 @respx.mock
-async def test_apply_process_update_creates_new_version():
+async def test_apply_skill_update_creates_new_version():
     _set_token_scope()
     respx.get("http://testserver/api/v1/settings").mock(
         return_value=Response(200, json={"allow_agent_process_updates": True})
     )
-    respx.get("http://testserver/api/v1/processes/deploy-to-production").mock(
+    respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL)
     )
-    create_route = respx.post(
-        "http://testserver/api/v1/processes/deploy-to-production/versions"
-    ).mock(
+    create_route = respx.post("http://testserver/api/v1/skills/deploy-to-production/versions").mock(
         return_value=Response(
             201,
             json={"id": "version-id-1", "version_number": 4},
@@ -405,14 +401,14 @@ async def test_apply_process_update_creates_new_version():
 
     proposed_markdown = "---\nowner: platform-team\n---\n\n## Steps\n\n1. Run deploy script."
     proposal = json.loads(
-        await propose_process_update(
+        await propose_skill_update(
             slug="deploy-to-production",
             proposed_markdown=proposed_markdown,
             change_summary="Add owner metadata and explicit steps.",
         )
     )
 
-    result = await apply_process_update(
+    result = await apply_skill_update(
         slug="deploy-to-production",
         proposed_markdown=proposed_markdown,
         change_summary="Add owner metadata and explicit steps.",
@@ -429,14 +425,14 @@ async def test_apply_process_update_creates_new_version():
 
 
 @respx.mock
-async def test_read_process_includes_koinoflow_context_block():
+async def test_read_skill_includes_koinoflow_context_block():
     _set_token_scope()
-    respx.get("http://testserver/api/v1/processes/deploy-to-production").mock(
+    respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL_WITH_METADATA)
     )
     respx.post("http://testserver/api/v1/usage").mock(return_value=Response(200, json={"ok": True}))
 
-    result = await read_process(slug="deploy-to-production", ctx=_make_ctx())
+    result = await read_skill(slug="deploy-to-production", ctx=_make_ctx())
 
     assert "**Koinoflow Context**" in result
     assert "Risk level: **high**" in result
@@ -448,27 +444,27 @@ async def test_read_process_includes_koinoflow_context_block():
 
 
 @respx.mock
-async def test_read_process_omits_context_block_when_metadata_empty():
+async def test_read_skill_omits_context_block_when_metadata_empty():
     _set_token_scope()
-    respx.get("http://testserver/api/v1/processes/deploy-to-production").mock(
+    respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL)
     )
     respx.post("http://testserver/api/v1/usage").mock(return_value=Response(200, json={"ok": True}))
 
-    result = await read_process(slug="deploy-to-production", ctx=_make_ctx())
+    result = await read_skill(slug="deploy-to-production", ctx=_make_ctx())
 
     assert "**Koinoflow Context**" not in result
     assert "Risk level" not in result
 
 
 @respx.mock
-async def test_list_processes_includes_risk_and_keywords():
+async def test_list_skills_includes_risk_and_keywords():
     _set_token_scope()
-    respx.get("http://testserver/api/v1/processes").mock(
+    respx.get("http://testserver/api/v1/skills").mock(
         return_value=Response(200, json=PROCESS_LIST_WITH_METADATA)
     )
 
-    result = await list_processes()
+    result = await list_skills()
 
     assert "[risk: high]" in result
     assert "[needs approval]" in result
@@ -476,24 +472,24 @@ async def test_list_processes_includes_risk_and_keywords():
 
 
 @respx.mock
-async def test_apply_process_update_rejects_token_mismatch():
+async def test_apply_skill_update_rejects_token_mismatch():
     _set_token_scope()
     respx.get("http://testserver/api/v1/settings").mock(
         return_value=Response(200, json={"allow_agent_process_updates": True})
     )
-    respx.get("http://testserver/api/v1/processes/deploy-to-production").mock(
+    respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL)
     )
 
     proposal = json.loads(
-        await propose_process_update(
+        await propose_skill_update(
             slug="deploy-to-production",
             proposed_markdown="## Steps\n\n1. Run deploy script.",
             change_summary="Refine structure.",
         )
     )
 
-    result = await apply_process_update(
+    result = await apply_skill_update(
         slug="deploy-to-production",
         proposed_markdown="## Steps\n\n1. Run deploy script.\n2. Verify.",
         change_summary="Refine structure.",
@@ -503,13 +499,13 @@ async def test_apply_process_update_rejects_token_mismatch():
 
 
 @respx.mock
-async def test_propose_process_update_blocked_when_setting_disabled():
+async def test_propose_skill_update_blocked_when_setting_disabled():
     _set_token_scope()
     respx.get("http://testserver/api/v1/settings").mock(
         return_value=Response(200, json={"allow_agent_process_updates": False})
     )
 
-    result = await propose_process_update(
+    result = await propose_skill_update(
         slug="deploy-to-production",
         proposed_markdown="## Steps\n\n1. Run deploy script.",
         change_summary="Refine structure.",
@@ -520,13 +516,13 @@ async def test_propose_process_update_blocked_when_setting_disabled():
 
 
 @respx.mock
-async def test_propose_process_update_blocked_when_setting_null():
+async def test_propose_skill_update_blocked_when_setting_null():
     _set_token_scope()
     respx.get("http://testserver/api/v1/settings").mock(
         return_value=Response(200, json={"allow_agent_process_updates": None})
     )
 
-    result = await propose_process_update(
+    result = await propose_skill_update(
         slug="deploy-to-production",
         proposed_markdown="## Steps\n\n1. Run deploy script.",
         change_summary="Refine structure.",

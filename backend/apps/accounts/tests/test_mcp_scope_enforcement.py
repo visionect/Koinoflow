@@ -15,8 +15,8 @@ from apps.accounts.models import McpConnectionScope, ScopeType
 from apps.accounts.permissions import _apply_membership_scope, apply_oauth_connection_scope
 from apps.orgs.enums import RoleChoices
 from apps.orgs.tests.factories import DepartmentFactory, MembershipFactory, TeamFactory
-from apps.processes.enums import VisibilityChoices
-from apps.processes.models import Process
+from apps.skills.enums import VisibilityChoices
+from apps.skills.models import Skill
 
 
 def _create_app_and_token(user):
@@ -47,10 +47,10 @@ class _MockRequest:
 
 
 def _make_process(department, visibility="department", status="published"):
-    return Process.objects.create(
+    return Skill.objects.create(
         department=department,
         title=f"Process in {department.name}",
-        slug=f"proc-{Process.objects.count()}",
+        slug=f"proc-{Skill.objects.count()}",
         status=status,
         visibility=visibility,
     )
@@ -70,7 +70,7 @@ class TestApplyOAuthConnectionScope:
 
         app, token = _create_app_and_token(membership.user)
         request = _MockRequest(membership=membership, oauth_token=token)
-        qs = Process.objects.filter(department__team__workspace=membership.workspace)
+        qs = Skill.objects.filter(department__team__workspace=membership.workspace)
         result = apply_oauth_connection_scope(request, qs)
         assert result.count() == 2
 
@@ -93,7 +93,7 @@ class TestApplyOAuthConnectionScope:
         )
 
         request = _MockRequest(membership=membership, oauth_token=token)
-        qs = Process.objects.filter(department__team__workspace=membership.workspace)
+        qs = Skill.objects.filter(department__team__workspace=membership.workspace)
         result = apply_oauth_connection_scope(request, qs)
         assert list(result) == [p1]
 
@@ -115,7 +115,7 @@ class TestApplyOAuthConnectionScope:
         scope.departments.add(dept1)
 
         request = _MockRequest(membership=membership, oauth_token=token)
-        qs = Process.objects.filter(department__team__workspace=membership.workspace)
+        qs = Skill.objects.filter(department__team__workspace=membership.workspace)
         result = apply_oauth_connection_scope(request, qs)
         assert list(result) == [p1]
 
@@ -138,7 +138,7 @@ class TestApplyOAuthConnectionScope:
         )
 
         request = _MockRequest(membership=membership, oauth_token=token)
-        qs = Process.objects.filter(department__team__workspace=membership.workspace)
+        qs = Skill.objects.filter(department__team__workspace=membership.workspace)
         result = apply_oauth_connection_scope(request, qs)
         assert ws_proc in result
         assert result.count() == 2
@@ -161,7 +161,7 @@ class TestApplyOAuthConnectionScope:
         scope.departments.add(dept1)
 
         request = _MockRequest(membership=membership, oauth_token=token)
-        qs = Process.objects.filter(department__team__workspace=membership.workspace)
+        qs = Skill.objects.filter(department__team__workspace=membership.workspace)
         result = apply_oauth_connection_scope(request, qs)
         assert team_proc in result
         assert result.count() == 2
@@ -182,7 +182,7 @@ class TestApplyOAuthConnectionScope:
         app, token = _create_app_and_token(membership.user)
 
         request = _MockRequest(membership=membership, oauth_token=token)
-        qs = Process.objects.filter(department__team__workspace=membership.workspace)
+        qs = Skill.objects.filter(department__team__workspace=membership.workspace)
         result = apply_oauth_connection_scope(request, qs)
         assert p1 in result
         assert result.count() == 1
@@ -209,7 +209,7 @@ class TestApplyOAuthConnectionScope:
         scope.departments.add(dept1)
 
         request = _MockRequest(membership=membership, oauth_token=token)
-        qs = Process.objects.filter(department__team__workspace=membership.workspace)
+        qs = Skill.objects.filter(department__team__workspace=membership.workspace)
         result = apply_oauth_connection_scope(request, qs)
         assert p1 in result
         assert result.count() == 1
@@ -226,7 +226,7 @@ class TestApplyMembershipScope:
         _make_process(dept)
 
         request = _MockRequest(membership=membership)
-        qs = Process.objects.filter(department__team__workspace=membership.workspace)
+        qs = Skill.objects.filter(department__team__workspace=membership.workspace)
         result = _apply_membership_scope(request, qs)
         assert result.count() == 1
 
@@ -243,7 +243,7 @@ class TestApplyMembershipScope:
         _make_process(dept2)
 
         request = _MockRequest(membership=membership)
-        qs = Process.objects.filter(department__team__workspace=membership.workspace)
+        qs = Skill.objects.filter(department__team__workspace=membership.workspace)
         result = _apply_membership_scope(request, qs)
         assert list(result) == [p1]
 
@@ -258,6 +258,6 @@ class TestApplyMembershipScope:
         _make_process(dept2)
 
         request = _MockRequest(membership=membership)
-        qs = Process.objects.filter(department__team__workspace=membership.workspace)
+        qs = Skill.objects.filter(department__team__workspace=membership.workspace)
         result = _apply_membership_scope(request, qs)
         assert list(result) == [p1]

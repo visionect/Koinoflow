@@ -4,13 +4,13 @@ import pytest
 from django.test import Client
 from django.utils import timezone
 
-from apps.orgs.models import ApiKey, CoreSettings, ProcessAuditRule
+from apps.orgs.models import ApiKey, CoreSettings, SkillAuditRule
 from apps.orgs.tests.factories import (
     DepartmentFactory,
     TeamFactory,
 )
-from apps.processes.enums import StatusChoices
-from apps.processes.tests.factories import ProcessFactory
+from apps.skills.enums import StatusChoices
+from apps.skills.tests.factories import SkillFactory
 from apps.usage.models import UsageEvent
 
 
@@ -20,7 +20,7 @@ class TestLogUsageEvent:
         ws = admin_membership.workspace
         team = TeamFactory(workspace=ws, slug="eng")
         dept = DepartmentFactory(team=team, slug="frontend")
-        process = ProcessFactory(department=dept, slug="deploy")
+        skill = SkillFactory(department=dept, slug="deploy")
 
         raw_key, key_hash, key_prefix = ApiKey.generate()
         ApiKey.objects.create(
@@ -34,7 +34,7 @@ class TestLogUsageEvent:
         resp = client.post(
             "/api/v1/usage",
             data={
-                "process_id": str(process.id),
+                "skill_id": str(skill.id),
                 "version_number": 1,
                 "client_id": "machine-42",
                 "client_type": "MCP",
@@ -46,7 +46,7 @@ class TestLogUsageEvent:
         assert resp.json() == {"ok": True}
 
         event = UsageEvent.objects.first()
-        assert event.process == process
+        assert event.skill == skill
         assert event.version_number == 1
         assert event.client_id == "machine-42"
         assert event.client_type == "MCP"
@@ -56,12 +56,12 @@ class TestLogUsageEvent:
         ws = admin_membership.workspace
         team = TeamFactory(workspace=ws, slug="eng")
         dept = DepartmentFactory(team=team, slug="frontend")
-        process = ProcessFactory(department=dept, slug="deploy")
+        skill = SkillFactory(department=dept, slug="deploy")
 
         resp = auth_client.post(
             "/api/v1/usage",
             data={
-                "process_id": str(process.id),
+                "skill_id": str(skill.id),
                 "version_number": 1,
             },
             content_type="application/json",
@@ -76,15 +76,15 @@ class TestListUsage:
         ws = admin_membership.workspace
         team = TeamFactory(workspace=ws, slug="eng")
         dept = DepartmentFactory(team=team, slug="frontend")
-        process = ProcessFactory(department=dept, slug="deploy")
+        skill = SkillFactory(department=dept, slug="deploy")
         UsageEvent.objects.create(
-            process=process,
+            skill=skill,
             version_number=1,
             client_id="m1",
             client_type="Cursor",
         )
         UsageEvent.objects.create(
-            process=process,
+            skill=skill,
             version_number=1,
             client_id="m2",
             client_type="Claude Desktop",
@@ -103,15 +103,15 @@ class TestUsageSummary:
         ws = admin_membership.workspace
         team = TeamFactory(workspace=ws, slug="eng")
         dept = DepartmentFactory(team=team, slug="frontend")
-        process = ProcessFactory(department=dept, slug="deploy", title="Deploy")
+        skill = SkillFactory(department=dept, slug="deploy", title="Deploy")
         UsageEvent.objects.create(
-            process=process, version_number=1, client_id="m1", client_type="Cursor"
+            skill=skill, version_number=1, client_id="m1", client_type="Cursor"
         )
         UsageEvent.objects.create(
-            process=process, version_number=1, client_id="m2", client_type="Cursor"
+            skill=skill, version_number=1, client_id="m2", client_type="Cursor"
         )
         UsageEvent.objects.create(
-            process=process, version_number=2, client_id="m1", client_type="Claude Desktop"
+            skill=skill, version_number=2, client_id="m1", client_type="Claude Desktop"
         )
 
         resp = auth_client.get("/api/v1/usage/summary")
@@ -120,7 +120,7 @@ class TestUsageSummary:
         assert data["count"] == 1
         assert len(data["items"]) == 1
         summary = data["items"][0]
-        assert summary["process_slug"] == "deploy"
+        assert summary["skill_slug"] == "deploy"
         assert summary["total_calls"] == 3
         assert summary["unique_clients"] == 2
         assert summary["client_type_breakdown"]["Cursor"] == 2
@@ -134,21 +134,19 @@ class TestUsageAnalytics:
         team = TeamFactory(workspace=ws, slug="eng")
         dept = DepartmentFactory(team=team, slug="devops")
 
-        rule = ProcessAuditRule.objects.create(workspace=ws, period_days=90)
-        CoreSettings.objects.create(workspace=ws, process_audit=rule)
+        rule = SkillAuditRule.objects.create(workspace=ws, period_days=90)
+        CoreSettings.objects.create(workspace=ws, skill_audit=rule)
 
         return ws, team, dept
 
     def test_analytics_coverage(self, auth_client, admin_membership):
         ws, team, dept = self._setup_workspace(admin_membership)
 
-        p1 = ProcessFactory(department=dept, slug="deploy", status=StatusChoices.PUBLISHED)
-        ProcessFactory(department=dept, slug="onboarding", status=StatusChoices.PUBLISHED)
-        ProcessFactory(department=dept, slug="draft-proc", status=StatusChoices.DRAFT)
+        p1 = SkillFactory(department=dept, slug="deploy", status=StatusChoices.PUBLISHED)
+        SkillFactory(department=dept, slug="onboarding", status=StatusChoices.PUBLISHED)
+        SkillFactory(department=dept, slug="draft-proc", status=StatusChoices.DRAFT)
 
-        UsageEvent.objects.create(
-            process=p1, version_number=1, client_id="m1", client_type="Cursor"
-        )
+        UsageEvent.objects.create(skill=p1, version_number=1, client_id="m1", client_type="Cursor")
 
         resp = auth_client.get("/api/v1/usage/analytics?days=30")
         assert resp.status_code == 200
@@ -163,14 +161,14 @@ class TestUsageAnalytics:
         ws, team, dept = self._setup_workspace(admin_membership)
 
         stale_date = timezone.now() - timedelta(days=120)
-        p1 = ProcessFactory(
+        p1 = SkillFactory(
             department=dept,
             slug="deploy",
             status=StatusChoices.PUBLISHED,
             last_reviewed_at=stale_date,
             owner=admin_membership.user,
         )
-        fresh = ProcessFactory(
+        fresh = SkillFactory(
             department=dept,
             slug="fresh-proc",
             status=StatusChoices.PUBLISHED,
@@ -179,10 +177,10 @@ class TestUsageAnalytics:
 
         for _ in range(5):
             UsageEvent.objects.create(
-                process=p1, version_number=1, client_id="m1", client_type="Cursor"
+                skill=p1, version_number=1, client_id="m1", client_type="Cursor"
             )
         UsageEvent.objects.create(
-            process=fresh, version_number=1, client_id="m1", client_type="Cursor"
+            skill=fresh, version_number=1, client_id="m1", client_type="Cursor"
         )
 
         resp = auth_client.get("/api/v1/usage/analytics?days=30")
@@ -191,22 +189,20 @@ class TestUsageAnalytics:
 
         stale = data["stale_but_relied_on"]
         assert len(stale) == 1
-        assert stale[0]["process_slug"] == "deploy"
+        assert stale[0]["skill_slug"] == "deploy"
         assert stale[0]["call_count"] == 5
         assert stale[0]["days_since_review"] == 120
 
     def test_analytics_daily_trend(self, auth_client, admin_membership):
         ws, team, dept = self._setup_workspace(admin_membership)
 
-        p1 = ProcessFactory(department=dept, slug="deploy", status=StatusChoices.PUBLISHED)
+        p1 = SkillFactory(department=dept, slug="deploy", status=StatusChoices.PUBLISHED)
 
         today = timezone.now()
         yesterday = today - timedelta(days=1)
-        UsageEvent.objects.create(
-            process=p1, version_number=1, client_id="m1", client_type="Cursor"
-        )
+        UsageEvent.objects.create(skill=p1, version_number=1, client_id="m1", client_type="Cursor")
         event2 = UsageEvent.objects.create(
-            process=p1, version_number=1, client_id="m2", client_type="Claude Code"
+            skill=p1, version_number=1, client_id="m2", client_type="Claude Code"
         )
         UsageEvent.objects.filter(pk=event2.pk).update(called_at=yesterday)
 
@@ -222,14 +218,14 @@ class TestUsageAnalytics:
     def test_analytics_client_breakdown(self, auth_client, admin_membership):
         ws, team, dept = self._setup_workspace(admin_membership)
 
-        p1 = ProcessFactory(department=dept, slug="deploy", status=StatusChoices.PUBLISHED)
+        p1 = SkillFactory(department=dept, slug="deploy", status=StatusChoices.PUBLISHED)
 
         for _ in range(3):
             UsageEvent.objects.create(
-                process=p1, version_number=1, client_id="m1", client_type="Cursor"
+                skill=p1, version_number=1, client_id="m1", client_type="Cursor"
             )
         UsageEvent.objects.create(
-            process=p1, version_number=1, client_id="m2", client_type="Claude Code"
+            skill=p1, version_number=1, client_id="m2", client_type="Claude Code"
         )
 
         resp = auth_client.get("/api/v1/usage/analytics?days=30")
@@ -265,22 +261,18 @@ class TestUsageAnalytics:
     def test_analytics_kpis(self, auth_client, admin_membership):
         ws, team, dept = self._setup_workspace(admin_membership)
 
-        p1 = ProcessFactory(department=dept, slug="deploy", status=StatusChoices.PUBLISHED)
+        p1 = SkillFactory(department=dept, slug="deploy", status=StatusChoices.PUBLISHED)
 
         # 3 current-period events from 2 distinct clients
+        UsageEvent.objects.create(skill=p1, version_number=1, client_id="m1", client_type="Cursor")
+        UsageEvent.objects.create(skill=p1, version_number=1, client_id="m1", client_type="Cursor")
         UsageEvent.objects.create(
-            process=p1, version_number=1, client_id="m1", client_type="Cursor"
-        )
-        UsageEvent.objects.create(
-            process=p1, version_number=1, client_id="m1", client_type="Cursor"
-        )
-        UsageEvent.objects.create(
-            process=p1, version_number=1, client_id="m2", client_type="Claude Code"
+            skill=p1, version_number=1, client_id="m2", client_type="Claude Code"
         )
 
         # 1 event in the previous period (40 days ago)
         prev = UsageEvent.objects.create(
-            process=p1, version_number=1, client_id="m3", client_type="Cursor"
+            skill=p1, version_number=1, client_id="m3", client_type="Cursor"
         )
         UsageEvent.objects.filter(pk=prev.pk).update(called_at=timezone.now() - timedelta(days=40))
 
@@ -298,46 +290,44 @@ class TestUsageAnalytics:
     def test_analytics_coverage_gap(self, auth_client, admin_membership):
         ws, team, dept = self._setup_workspace(admin_membership)
 
-        p1 = ProcessFactory(
+        p1 = SkillFactory(
             department=dept,
             slug="deploy",
             status=StatusChoices.PUBLISHED,
             owner=admin_membership.user,
         )
-        p2 = ProcessFactory(
+        p2 = SkillFactory(
             department=dept,
             slug="onboarding",
             status=StatusChoices.PUBLISHED,
         )
-        ProcessFactory(department=dept, slug="draft-proc", status=StatusChoices.DRAFT)
+        SkillFactory(department=dept, slug="draft-proc", status=StatusChoices.DRAFT)
 
-        UsageEvent.objects.create(
-            process=p1, version_number=1, client_id="m1", client_type="Cursor"
-        )
+        UsageEvent.objects.create(skill=p1, version_number=1, client_id="m1", client_type="Cursor")
 
         resp = auth_client.get("/api/v1/usage/analytics?days=30")
         assert resp.status_code == 200
         gap = resp.json()["coverage_gap"]
 
         assert len(gap) == 1
-        assert gap[0]["process_slug"] == p2.slug
+        assert gap[0]["skill_slug"] == p2.slug
         assert gap[0]["days_since_published"] >= 0
 
     def test_analytics_tool_breakdown(self, auth_client, admin_membership):
         ws, team, dept = self._setup_workspace(admin_membership)
 
-        p1 = ProcessFactory(department=dept, slug="deploy", status=StatusChoices.PUBLISHED)
+        p1 = SkillFactory(department=dept, slug="deploy", status=StatusChoices.PUBLISHED)
 
         for _ in range(3):
             UsageEvent.objects.create(
-                process=p1,
+                skill=p1,
                 version_number=1,
                 client_id="m1",
                 client_type="MCP",
-                tool_name="get_process",
+                tool_name="get_skill",
             )
         UsageEvent.objects.create(
-            process=p1,
+            skill=p1,
             version_number=1,
             client_id="m1",
             client_type="MCP",
@@ -345,7 +335,7 @@ class TestUsageAnalytics:
         )
         # Empty tool_name → bucketed as REST
         UsageEvent.objects.create(
-            process=p1, version_number=1, client_id="m1", client_type="REST API"
+            skill=p1, version_number=1, client_id="m1", client_type="REST API"
         )
 
         resp = auth_client.get("/api/v1/usage/analytics?days=30")
@@ -353,7 +343,7 @@ class TestUsageAnalytics:
         tools = resp.json()["tool_breakdown"]
 
         by_tool = {t["tool_name"]: t for t in tools}
-        assert by_tool["get_process"]["count"] == 3
-        assert by_tool["get_process"]["percentage"] == 60.0
+        assert by_tool["get_skill"]["count"] == 3
+        assert by_tool["get_skill"]["percentage"] == 60.0
         assert by_tool["search_processes"]["count"] == 1
         assert by_tool["REST"]["count"] == 1

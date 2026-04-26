@@ -48,7 +48,7 @@ const BOOLEAN_SETTINGS = [
   {
     key: "enable_api_access" as const,
     label: "Enable API access",
-    description: "Allow external clients to read processes via the API.",
+    description: "Allow external clients to read skills via the API.",
   },
   {
     key: "require_change_summary" as const,
@@ -56,10 +56,10 @@ const BOOLEAN_SETTINGS = [
     description: "Require authors to provide a change summary when publishing a version.",
   },
   {
-    key: "allow_agent_process_updates" as const,
-    label: "Allow agent process updates",
+    key: "allow_agent_skill_updates" as const,
+    label: "Allow agent skill updates",
     description:
-      "Allow AI agents (via MCP) to propose and publish new process versions. Disabled by default.",
+      "Allow AI agents (via MCP) to propose and publish new skill versions. Disabled by default.",
   },
 ]
 
@@ -90,7 +90,7 @@ export function SettingsPage() {
   const createStalenessAlertRule = useCreateStalenessAlertRule()
   const updateStalenessAlertRule = useUpdateStalenessAlertRule()
 
-  const currentAuditRule = settingsQuery.data?.process_audit ?? null
+  const currentAuditRule = settingsQuery.data?.skill_audit ?? null
   const [auditPeriod, setAuditPeriod] = React.useState(String(currentAuditRule?.period_days ?? 90))
 
   React.useEffect(() => {
@@ -142,22 +142,22 @@ export function SettingsPage() {
           workspace_id: workspaceQuery.data.id,
           team_id: scopeTeamId ?? null,
           department_id: scopeDeptId ?? null,
-          process_audit_id: ruleId,
+          skill_audit_id: ruleId,
         })
-        toast.success("Process audit enabled")
+        toast.success("Skill audit enabled")
       } else {
         await upsertSettings.mutateAsync({
           workspace_id: workspaceQuery.data.id,
           team_id: scopeTeamId ?? null,
           department_id: scopeDeptId ?? null,
-          process_audit_id: "",
+          skill_audit_id: "",
         })
         toast.success(
-          value === "inherit" ? "Process audit set to inherit" : "Process audit disabled",
+          value === "inherit" ? "Skill audit set to inherit" : "Skill audit disabled",
         )
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update process audit")
+      toast.error(error instanceof Error ? error.message : "Unable to update skill audit")
     }
   }
 
@@ -177,9 +177,9 @@ export function SettingsPage() {
         workspace_id: workspaceQuery.data.id,
         team_id: scopeTeamId ?? null,
         department_id: scopeDeptId ?? null,
-        process_audit_id: ruleId,
+        skill_audit_id: ruleId,
       })
-      toast.success(`Process audit updated: every ${days} days`)
+      toast.success(`Skill audit updated: every ${days} days`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update audit period")
     }
@@ -194,7 +194,7 @@ export function SettingsPage() {
           period_days: days,
           notify_admins: true,
           notify_team_managers: false,
-          notify_process_owner: true,
+          notify_skill_owner: true,
         })
         await upsertSettings.mutateAsync({
           workspace_id: workspaceQuery.data.id,
@@ -235,7 +235,7 @@ export function SettingsPage() {
   }
 
   async function handleStalenessRecipient(
-    field: "notify_admins" | "notify_team_managers" | "notify_process_owner",
+    field: "notify_admins" | "notify_team_managers" | "notify_skill_owner",
     checked: boolean,
   ) {
     if (!currentStalenessRule) return
@@ -258,7 +258,7 @@ export function SettingsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Workspace settings"
-        description="Configure policies that govern how processes are managed across the workspace."
+        description="Configure policies that govern how skills are managed across the workspace."
       />
 
       {isAdmin && hasTeams ? (
@@ -351,7 +351,7 @@ export function SettingsPage() {
               <CardDescription>
                 {isSubScope
                   ? `Overrides for this ${scopeLabel}. Set to "Inherit" to fall back to the parent scope.`
-                  : "Configure workspace-wide rules for process management."}
+                  : "Configure workspace-wide rules for skill management."}
               </CardDescription>
             </div>
             <Badge variant="secondary" className="capitalize">
@@ -414,13 +414,13 @@ export function SettingsPage() {
             )
           })}
 
-          {/* Process audit row */}
+          {/* Skill audit row */}
           <div className="rounded-lg border p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
               <div className="space-y-0.5">
-                <p className="text-sm font-medium">Process audit</p>
+                <p className="text-sm font-medium">Skill audit</p>
                 <p className="text-xs text-muted-foreground">
-                  Require process owners to periodically confirm their processes are still accurate.
+                  Require skill owners to periodically confirm their skills are still accurate.
                 </p>
                 {currentAuditRule ? (
                   <div className="flex items-center gap-2 pt-2">
@@ -477,7 +477,7 @@ export function SettingsPage() {
               <div className="space-y-0.5 flex-1 min-w-0">
                 <p className="text-sm font-medium">Staleness alerts</p>
                 <p className="text-xs text-muted-foreground">
-                  Send email alerts when processes haven&rsquo;t been used within a set period.
+                  Send email alerts when skills haven&rsquo;t been used within a set period.
                 </p>
                 {currentStalenessRule ? (
                   <div className="space-y-3 pt-2">
@@ -532,16 +532,16 @@ export function SettingsPage() {
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer">
                           <Checkbox
-                            checked={currentStalenessRule.notify_process_owner}
+                            checked={currentStalenessRule.notify_skill_owner}
                             onCheckedChange={(checked) =>
                               void handleStalenessRecipient(
-                                "notify_process_owner",
+                                "notify_skill_owner",
                                 Boolean(checked),
                               )
                             }
                             disabled={updateStalenessAlertRule.isPending}
                           />
-                          <span className="text-xs">Process owners</span>
+                          <span className="text-xs">Skill owners</span>
                         </label>
                       </div>
                     ) : null}

@@ -444,7 +444,7 @@ export function MembersPage() {
                   <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-900 dark:text-amber-200">
                     <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" aria-hidden />
                     <p>
-                      Members without a department only see workspace-wide processes. Most invitees
+                      Members without a department only see workspace-wide skills. Most invitees
                       should be scoped to at least one department.
                     </p>
                   </div>

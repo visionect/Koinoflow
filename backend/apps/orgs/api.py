@@ -24,7 +24,7 @@ from apps.orgs.models import (
     Department,
     Membership,
     PendingInvitation,
-    ProcessAuditRule,
+    SkillAuditRule,
     StalenessAlertRule,
     Team,
     Workspace,
@@ -43,11 +43,11 @@ def _department_process_count_annotations():
     Each bucket excludes processes already counted in earlier buckets so the
     final sum (home + shared + team + workspace) has no double-counting.
     """
-    from apps.processes.enums import VisibilityChoices
-    from apps.processes.models import Process
+    from apps.skills.enums import VisibilityChoices
+    from apps.skills.models import Skill
 
     home_sq = (
-        Process.objects.filter(department=OuterRef("pk"))
+        Skill.objects.filter(department=OuterRef("pk"))
         .order_by()
         .values("department")
         .annotate(c=Count("*"))
@@ -55,7 +55,7 @@ def _department_process_count_annotations():
     )
     # Exclude processes whose home department is this one (already in home_sq)
     shared_sq = (
-        Process.objects.filter(shared_with=OuterRef("pk"))
+        Skill.objects.filter(shared_with=OuterRef("pk"))
         .exclude(department_id=OuterRef("pk"))
         .order_by()
         .values("shared_with")
@@ -65,7 +65,7 @@ def _department_process_count_annotations():
     # Team-wide from sibling depts, excluding home (already done) AND
     # excluding processes explicitly shared with this dept (already in shared_sq)
     team_sq = (
-        Process.objects.filter(
+        Skill.objects.filter(
             visibility=VisibilityChoices.TEAM,
             department__team_id=OuterRef("team_id"),
         )
@@ -79,7 +79,7 @@ def _department_process_count_annotations():
     # Workspace-wide from other depts, excluding home, shared, and team-wide
     # siblings (all already counted above)
     workspace_sq = (
-        Process.objects.filter(
+        Skill.objects.filter(
             visibility=VisibilityChoices.WORKSPACE,
             department__team__workspace_id=OuterRef("team__workspace_id"),
         )
@@ -251,7 +251,7 @@ class StalenessAlertRuleBriefOut(Schema):
     period_days: int
     notify_admins: bool
     notify_team_managers: bool
-    notify_process_owner: bool
+    notify_skill_owner: bool
 
 
 class StalenessAlertRuleOut(Schema):
@@ -259,7 +259,7 @@ class StalenessAlertRuleOut(Schema):
     period_days: int
     notify_admins: bool
     notify_team_managers: bool
-    notify_process_owner: bool
+    notify_skill_owner: bool
     created_at: str
 
 
@@ -272,14 +272,14 @@ class CreateStalenessAlertRuleIn(Schema):
     period_days: int
     notify_admins: bool = True
     notify_team_managers: bool = False
-    notify_process_owner: bool = True
+    notify_skill_owner: bool = True
 
 
 class UpdateStalenessAlertRuleIn(Schema):
     period_days: int | None = None
     notify_admins: bool | None = None
     notify_team_managers: bool | None = None
-    notify_process_owner: bool | None = None
+    notify_skill_owner: bool | None = None
 
 
 class SettingsOut(Schema):
@@ -291,8 +291,8 @@ class SettingsOut(Schema):
     enable_version_history: bool | None
     enable_api_access: bool | None
     require_change_summary: bool | None
-    allow_agent_process_updates: bool | None
-    process_audit: AuditRuleBriefOut | None
+    allow_agent_skill_updates: bool | None
+    skill_audit: AuditRuleBriefOut | None
     staleness_alert: StalenessAlertRuleBriefOut | None
 
 
@@ -301,8 +301,8 @@ class EffectiveSettingsOut(Schema):
     enable_version_history: bool | None
     enable_api_access: bool | None
     require_change_summary: bool | None
-    allow_agent_process_updates: bool | None
-    process_audit: AuditRuleBriefOut | None
+    allow_agent_skill_updates: bool | None
+    skill_audit: AuditRuleBriefOut | None
     staleness_alert: StalenessAlertRuleBriefOut | None
 
 
@@ -314,8 +314,8 @@ class UpsertSettingsIn(Schema):
     enable_version_history: bool | None = None
     enable_api_access: bool | None = None
     require_change_summary: bool | None = None
-    allow_agent_process_updates: bool | None = None
-    process_audit_id: str | None = None
+    allow_agent_skill_updates: bool | None = None
+    skill_audit_id: str | None = None
     staleness_alert_id: str | None = None
 
 
@@ -404,7 +404,7 @@ def _staleness_alert_brief(rule):
         "period_days": rule.period_days,
         "notify_admins": rule.notify_admins,
         "notify_team_managers": rule.notify_team_managers,
-        "notify_process_owner": rule.notify_process_owner,
+        "notify_skill_owner": rule.notify_skill_owner,
     }
 
 
@@ -457,7 +457,7 @@ def create_workspace(request, payload: CreateWorkspaceIn):
             workspace=workspace,
             role=RoleChoices.ADMIN,
         )
-        ProcessAuditRule.objects.create(workspace=workspace, period_days=90)
+        SkillAuditRule.objects.create(workspace=workspace, period_days=90)
 
         if settings.ENABLE_BILLING:
             trial_plan, _ = Plan.objects.get_or_create(
@@ -1036,7 +1036,7 @@ def delete_department(request, id: str):
 def get_settings(request, team_id: str | None = None, department_id: str | None = None):
     workspace = request.workspace
     effective = get_effective_settings(workspace.id, team_id=team_id, department_id=department_id)
-    effective["process_audit"] = _audit_rule_brief(effective.get("process_audit"))
+    effective["skill_audit"] = _audit_rule_brief(effective.get("skill_audit"))
     effective["staleness_alert"] = _staleness_alert_brief(effective.get("staleness_alert"))
     return effective
 
@@ -1063,18 +1063,18 @@ def upsert_settings(request, payload: UpsertSettingsIn):
         if val is not None:
             setattr(settings_row, field, val)
 
-    if payload.process_audit_id is not None:
-        if payload.process_audit_id == "":
-            settings_row.process_audit = None
+    if payload.skill_audit_id is not None:
+        if payload.skill_audit_id == "":
+            settings_row.skill_audit = None
         else:
             try:
-                rule = ProcessAuditRule.objects.get(
-                    id=payload.process_audit_id,
+                rule = SkillAuditRule.objects.get(
+                    id=payload.skill_audit_id,
                     workspace=workspace,
                 )
-            except ProcessAuditRule.DoesNotExist:
+            except SkillAuditRule.DoesNotExist:
                 raise HttpError(404, "Audit rule not found")
-            settings_row.process_audit = rule
+            settings_row.skill_audit = rule
 
     if payload.staleness_alert_id is not None:
         if payload.staleness_alert_id == "":
@@ -1091,7 +1091,7 @@ def upsert_settings(request, payload: UpsertSettingsIn):
 
     settings_row.save()
 
-    settings_row = CoreSettings.objects.select_related("process_audit", "staleness_alert").get(
+    settings_row = CoreSettings.objects.select_related("skill_audit", "staleness_alert").get(
         id=settings_row.id
     )
 
@@ -1104,8 +1104,8 @@ def upsert_settings(request, payload: UpsertSettingsIn):
         "enable_version_history": settings_row.enable_version_history,
         "enable_api_access": settings_row.enable_api_access,
         "require_change_summary": settings_row.require_change_summary,
-        "allow_agent_process_updates": settings_row.allow_agent_process_updates,
-        "process_audit": _audit_rule_brief(settings_row.process_audit),
+        "allow_agent_skill_updates": settings_row.allow_agent_skill_updates,
+        "skill_audit": _audit_rule_brief(settings_row.skill_audit),
         "staleness_alert": _staleness_alert_brief(settings_row.staleness_alert),
     }
 
@@ -1124,7 +1124,7 @@ def list_audit_rules(request, limit: int = 50, offset: int = 0):
     workspace = request.workspace
     limit = min(max(limit, 1), 200)
     offset = max(offset, 0)
-    qs = ProcessAuditRule.objects.filter(workspace=workspace).order_by("period_days")
+    qs = SkillAuditRule.objects.filter(workspace=workspace).order_by("period_days")
     count = qs.count()
     items = [
         {
@@ -1148,7 +1148,7 @@ def create_audit_rule(request, payload: CreateAuditRuleIn):
     workspace = request.workspace
     if payload.period_days < 1:
         raise HttpError(400, "period_days must be at least 1")
-    rule = ProcessAuditRule.objects.create(
+    rule = SkillAuditRule.objects.create(
         workspace=workspace,
         period_days=payload.period_days,
     )
@@ -1167,8 +1167,8 @@ def create_audit_rule(request, payload: CreateAuditRuleIn):
 def delete_audit_rule(request, rule_id: str):
     workspace = request.workspace
     try:
-        rule = ProcessAuditRule.objects.get(id=rule_id, workspace=workspace)
-    except ProcessAuditRule.DoesNotExist:
+        rule = SkillAuditRule.objects.get(id=rule_id, workspace=workspace)
+    except SkillAuditRule.DoesNotExist:
         raise HttpError(404, "Audit rule not found")
     rule.delete()
     return {"ok": True}
@@ -1196,7 +1196,7 @@ def list_staleness_alert_rules(request, limit: int = 50, offset: int = 0):
             "period_days": r.period_days,
             "notify_admins": r.notify_admins,
             "notify_team_managers": r.notify_team_managers,
-            "notify_process_owner": r.notify_process_owner,
+            "notify_skill_owner": r.notify_skill_owner,
             "created_at": r.created_at.isoformat(),
         }
         for r in qs[offset : offset + limit]
@@ -1220,7 +1220,7 @@ def create_staleness_alert_rule(request, payload: CreateStalenessAlertRuleIn):
         period_days=payload.period_days,
         notify_admins=payload.notify_admins,
         notify_team_managers=payload.notify_team_managers,
-        notify_process_owner=payload.notify_process_owner,
+        notify_skill_owner=payload.notify_skill_owner,
     )
     return Status(
         201,
@@ -1229,7 +1229,7 @@ def create_staleness_alert_rule(request, payload: CreateStalenessAlertRuleIn):
             "period_days": rule.period_days,
             "notify_admins": rule.notify_admins,
             "notify_team_managers": rule.notify_team_managers,
-            "notify_process_owner": rule.notify_process_owner,
+            "notify_skill_owner": rule.notify_skill_owner,
             "created_at": rule.created_at.isoformat(),
         },
     )
@@ -1257,8 +1257,8 @@ def update_staleness_alert_rule(request, rule_id: str, payload: UpdateStalenessA
         rule.notify_admins = payload.notify_admins
     if payload.notify_team_managers is not None:
         rule.notify_team_managers = payload.notify_team_managers
-    if payload.notify_process_owner is not None:
-        rule.notify_process_owner = payload.notify_process_owner
+    if payload.notify_skill_owner is not None:
+        rule.notify_skill_owner = payload.notify_skill_owner
 
     rule.save()
     return {
@@ -1266,7 +1266,7 @@ def update_staleness_alert_rule(request, rule_id: str, payload: UpdateStalenessA
         "period_days": rule.period_days,
         "notify_admins": rule.notify_admins,
         "notify_team_managers": rule.notify_team_managers,
-        "notify_process_owner": rule.notify_process_owner,
+        "notify_skill_owner": rule.notify_skill_owner,
         "created_at": rule.created_at.isoformat(),
     }
 
