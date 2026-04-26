@@ -1,13 +1,12 @@
 from django.db import migrations, models
 
-
 AGENTS_SYSTEM_KIND = "agents"
 
 
-def _unique_slug(CoreSlug, entity_type, base, **scope):
+def _unique_slug(core_slug_model, entity_type, base, **scope):
     candidate = base
     suffix = 2
-    while CoreSlug.objects.filter(entity_type=entity_type, slug=candidate, **scope).exists():
+    while core_slug_model.objects.filter(entity_type=entity_type, slug=candidate, **scope).exists():
         candidate = f"{base}-{suffix}"
         suffix += 1
     return candidate
@@ -73,12 +72,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="team",
             name="system_kind",
-            field=models.CharField(blank=True, db_index=True, default="", max_length=50),
+            field=models.CharField(blank=True, default="", max_length=50),
         ),
         migrations.AddField(
             model_name="department",
             name="system_kind",
-            field=models.CharField(blank=True, db_index=True, default="", max_length=50),
+            field=models.CharField(blank=True, default="", max_length=50),
         ),
         migrations.RunPython(create_agents_spaces, migrations.RunPython.noop),
     ]
