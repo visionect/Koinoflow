@@ -11,11 +11,31 @@ from oauth2_provider.models import AccessToken, Application
 from apps.connectors.tests.factories import CaptureCandidateFactory, ConnectorCredentialFactory
 from apps.orgs.models import SYSTEM_KIND_AGENTS, ApiKey, CoreSettings
 from apps.orgs.tests.factories import DepartmentFactory, TeamFactory
-from apps.skills.discovery import build_skill_indexed_text
+from apps.skills.discovery import build_skill_indexed_text, queue_skill_discovery_embedding
 from apps.skills.enums import StatusChoices, VisibilityChoices
 from apps.skills.files import resolve_files
 from apps.skills.models import Skill, SkillDiscoveryEmbedding, SkillVersion, VersionFile
 from apps.skills.tests.factories import SkillFactory, SkillVersionFactory, VersionFileFactory
+
+
+class TestSkillDiscoveryQueue:
+    def test_queue_uses_configured_task_backend(self, monkeypatch):
+        calls = []
+
+        class FakeTaskBackend:
+            def enqueue(self, task_name: str, **kwargs):
+                calls.append((task_name, kwargs))
+
+        monkeypatch.setattr("tasks.task_backend", FakeTaskBackend())
+
+        queue_skill_discovery_embedding("version-1", force=True)
+
+        assert calls == [
+            (
+                "index_skill_discovery_embedding",
+                {"version_id": "version-1", "force": True},
+            )
+        ]
 
 
 @pytest.mark.django_db

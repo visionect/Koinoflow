@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 5
 INITIAL_BACKOFF_SECS = 2.0
 MAX_BACKOFF_SECS = 60.0
+VERTEX_AUTH_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 
 
 @dataclass
@@ -54,36 +55,21 @@ class GeminiProvider(LLMProvider):
             from django.conf import settings
             from google import genai
 
-            if getattr(settings, "LOCAL_ENV", False):
-                import json
-                import os
-                import stat
-                import tempfile
+            credentials_info = _vertex_service_account_info(settings)
+            client_kwargs = {
+                "vertexai": True,
+                "project": _resolve_vertex_project(settings, self.project),
+                "location": self.location,
+            }
+            if credentials_info is not None:
+                from google.oauth2 import service_account
 
-                creds = {
-                    "type": "service_account",
-                    "project_id": settings.VERTEX_CLIENT_PROJECT_ID,
-                    "private_key_id": settings.VERTEX_CLIENT_PRIVATE_KEY_ID,
-                    "private_key": settings.VERTEX_CLIENT_PRIVATE_KEY.replace("\\n", "\n"),
-                    "client_email": settings.VERTEX_CLIENT_EMAIL,
-                    "client_id": settings.VERTEX_CLIENT_ID,
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-                    "client_x509_cert_url": settings.VERTEX_CLIENT_CERT_URL,
-                    "universe_domain": "googleapis.com",
-                }
-                fd, creds_path = tempfile.mkstemp(prefix="vertex_sa_", suffix=".json")
-                try:
-                    os.fchmod(fd, stat.S_IRUSR | stat.S_IWUSR)
-                    with os.fdopen(fd, "w") as f:
-                        json.dump(creds, f)
-                except Exception:
-                    os.close(fd) if not os.path.exists(creds_path) else None
-                    raise
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = creds_path
+                credentials = service_account.Credentials.from_service_account_info(
+                    credentials_info, scopes=[VERTEX_AUTH_SCOPE]
+                )
+                client_kwargs["credentials"] = credentials
 
-            self._client = genai.Client(vertexai=True, project=self.project, location=self.location)
+            self._client = genai.Client(**client_kwargs)
         return self._client
 
     def generate(
@@ -230,8 +216,36 @@ def get_extraction_model() -> LLMProvider:
     return _build_provider(settings.CAPTURE_EXTRACTION_MODEL, settings)
 
 
+def _vertex_service_account_info(settings) -> dict | None:
+    required_fields = {
+        "project_id": getattr(settings, "VERTEX_CLIENT_PROJECT_ID", ""),
+        "private_key_id": getattr(settings, "VERTEX_CLIENT_PRIVATE_KEY_ID", ""),
+        "private_key": getattr(settings, "VERTEX_CLIENT_PRIVATE_KEY", ""),
+        "client_email": getattr(settings, "VERTEX_CLIENT_EMAIL", ""),
+        "client_id": getattr(settings, "VERTEX_CLIENT_ID", ""),
+        "client_x509_cert_url": getattr(settings, "VERTEX_CLIENT_CERT_URL", ""),
+    }
+    if not all(required_fields.values()):
+        return None
+    return {
+        "type": "service_account",
+        **required_fields,
+        "private_key": required_fields["private_key"].replace("\\n", "\n"),
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "universe_domain": "googleapis.com",
+    }
+
+
+def _resolve_vertex_project(settings, fallback: str = "") -> str:
+    if _vertex_service_account_info(settings) is not None:
+        return getattr(settings, "VERTEX_CLIENT_PROJECT_ID", "")
+    return fallback or getattr(settings, "VERTEX_PROJECT_ID", "")
+
+
 def _build_provider(model_name: str, settings) -> LLMProvider:
-    project = getattr(settings, "VERTEX_PROJECT_ID", "")
+    project = _resolve_vertex_project(settings)
     location = getattr(settings, "VERTEX_LOCATION", "global")
 
     if "claude" in model_name.lower():

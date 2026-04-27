@@ -94,10 +94,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          vertex_secrets="VERTEX_PROJECT_ID=VERTEX_PROJECT_ID:latest"
+          vertex_secrets+=",VERTEX_LOCATION=VERTEX_LOCATION:latest"
+          vertex_secrets+=",VERTEX_CLIENT_PROJECT_ID=VERTEX_CLIENT_PROJECT_ID:latest"
+          vertex_secrets+=",VERTEX_CLIENT_PRIVATE_KEY_ID=VERTEX_CLIENT_PRIVATE_KEY_ID:latest"
+          vertex_secrets+=",VERTEX_CLIENT_PRIVATE_KEY=VERTEX_CLIENT_PRIVATE_KEY:latest"
+          vertex_secrets+=",VERTEX_CLIENT_EMAIL=VERTEX_CLIENT_EMAIL:latest"
+          vertex_secrets+=",VERTEX_CLIENT_ID=VERTEX_CLIENT_ID:latest"
+          vertex_secrets+=",VERTEX_CLIENT_CERT_URL=VERTEX_CLIENT_CERT_URL:latest"
+
           gcloud run services update "${BACKEND_SERVICE}" \
             --project="${PROJECT_ID}" \
             --region="${REGION}" \
-            --image="${BACKEND_IMAGE}"
+            --image="${BACKEND_IMAGE}" \
+            --set-secrets="${vertex_secrets}"
 
           gcloud run services update "${MCP_SERVICE}" \
             --project="${PROJECT_ID}" \
