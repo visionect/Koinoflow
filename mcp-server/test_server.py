@@ -10,6 +10,7 @@ os.environ["KOINOFLOW_API_URL"] = "http://testserver/api/v1"
 os.environ.setdefault("KOINOFLOW_API_KEY", "test-key")
 os.environ.setdefault("MCP_APPROVAL_TOKEN_SECRET", "test-approval-secret")
 
+from auth import get_authorization_server_metadata  # noqa: E402
 from server import (  # noqa: E402
     _mcp_client_type,
     _token_info_var,
@@ -127,6 +128,16 @@ PROCESS_LIST_WITH_METADATA = {
     ],
     "count": 1,
 }
+
+
+def test_authorization_server_metadata_matches_mcp_requested_scopes():
+    data = get_authorization_server_metadata()
+
+    assert data["issuer"] == "http://testserver"
+    assert data["authorization_endpoint"] == "http://testserver/oauth/authorize/"
+    assert data["registration_endpoint"] == "http://testserver/oauth/register"
+    assert data["scopes_supported"] == ["skills:read", "skills:write", "usage:write"]
+
 
 PROCESS_DISCOVERY = {
     "items": [

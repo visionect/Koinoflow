@@ -87,6 +87,32 @@ class TestSanitiseClientName:
 
 
 @pytest.mark.django_db
+class TestOAuthMetadataScopes:
+    def test_authorization_server_metadata_advertises_mcp_skill_scopes(self):
+        resp = Client().get("/.well-known/oauth-authorization-server")
+        assert resp.status_code == 200
+
+        data = resp.json()
+        assert data["scopes_supported"] == ["skills:read", "skills:write", "usage:write"]
+
+    def test_dynamic_registration_defaults_to_mcp_skill_scopes(self):
+        resp = Client().post(
+            "/oauth/register",
+            data=json.dumps(
+                {
+                    "client_name": "test-client",
+                    "redirect_uris": ["https://mcp.example.com/cb"],
+                }
+            ),
+            content_type="application/json",
+        )
+        assert resp.status_code == 201
+
+        data = resp.json()
+        assert data["scope"] == "skills:read skills:write usage:write"
+
+
+@pytest.mark.django_db
 class TestDCRRateLimit:
     def setup_method(self):
         cache.clear()
