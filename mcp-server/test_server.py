@@ -138,6 +138,7 @@ def test_authorization_server_metadata_matches_mcp_requested_scopes():
     assert data["registration_endpoint"] == "http://testserver/oauth/register"
     assert data["scopes_supported"] == ["skills:read", "skills:write", "usage:write"]
 
+
 PROCESS_DISCOVERY = {
     "items": [
         {
