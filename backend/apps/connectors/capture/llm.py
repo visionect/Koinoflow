@@ -64,10 +64,10 @@ class GeminiProvider(LLMProvider):
             if credentials_info is not None:
                 from google.oauth2 import service_account
 
-                client_kwargs["credentials"] = service_account.Credentials.from_service_account_info(
-                    credentials_info,
-                    scopes=[VERTEX_AUTH_SCOPE],
+                credentials = service_account.Credentials.from_service_account_info(
+                    credentials_info, scopes=[VERTEX_AUTH_SCOPE]
                 )
+                client_kwargs["credentials"] = credentials
 
             self._client = genai.Client(**client_kwargs)
         return self._client
