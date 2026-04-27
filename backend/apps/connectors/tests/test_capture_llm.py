@@ -8,6 +8,8 @@ from apps.connectors.capture.llm import (
     LLMResult,
     _build_provider,
     _extract_grounding_sources,
+    _resolve_vertex_project,
+    _vertex_service_account_info,
 )
 
 
@@ -124,6 +126,36 @@ class TestGeminiProvider:
         result = provider.generate(system="sys", user="msg")
         assert result.text == ""
 
+    def test_client_uses_configured_service_account(self, settings):
+        settings.VERTEX_CLIENT_PROJECT_ID = "sponsored-project"
+        settings.VERTEX_CLIENT_PRIVATE_KEY_ID = "key-id"
+        settings.VERTEX_CLIENT_PRIVATE_KEY = (
+            "-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----\\n"
+        )
+        settings.VERTEX_CLIENT_EMAIL = "vertex@example.iam.gserviceaccount.com"
+        settings.VERTEX_CLIENT_ID = "client-id"
+        settings.VERTEX_CLIENT_CERT_URL = "https://example.com/cert"
+
+        provider = self._make_provider()
+        mock_credentials = MagicMock()
+
+        with (
+            patch("google.genai.Client") as mock_client,
+            patch(
+                "google.oauth2.service_account.Credentials.from_service_account_info",
+                return_value=mock_credentials,
+            ) as mock_from_info,
+        ):
+            provider._get_client()
+
+        mock_from_info.assert_called_once()
+        mock_client.assert_called_once_with(
+            vertexai=True,
+            project="sponsored-project",
+            location="us-central1",
+            credentials=mock_credentials,
+        )
+
 
 class TestClaudeVertexProvider:
     def _make_provider(self):
@@ -188,3 +220,22 @@ class TestBuildProvider:
         settings.VERTEX_LOCATION = "global"
         provider = _build_provider("gemini-3-flash-preview", settings)
         assert isinstance(provider, GeminiProvider)
+
+    def test_service_account_project_takes_precedence(self, settings):
+        settings.VERTEX_PROJECT_ID = "runtime-project"
+        settings.VERTEX_CLIENT_PROJECT_ID = "sponsored-project"
+        settings.VERTEX_CLIENT_PRIVATE_KEY_ID = "key-id"
+        settings.VERTEX_CLIENT_PRIVATE_KEY = "private-key"
+        settings.VERTEX_CLIENT_EMAIL = "vertex@example.iam.gserviceaccount.com"
+        settings.VERTEX_CLIENT_ID = "client-id"
+        settings.VERTEX_CLIENT_CERT_URL = "https://example.com/cert"
+
+        assert _resolve_vertex_project(settings) == "sponsored-project"
+
+    def test_incomplete_service_account_uses_vertex_project(self, settings):
+        settings.VERTEX_PROJECT_ID = "runtime-project"
+        settings.VERTEX_CLIENT_PROJECT_ID = "sponsored-project"
+        settings.VERTEX_CLIENT_PRIVATE_KEY_ID = ""
+
+        assert _vertex_service_account_info(settings) is None
+        assert _resolve_vertex_project(settings) == "runtime-project"

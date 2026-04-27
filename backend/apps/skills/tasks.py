@@ -8,6 +8,14 @@ from tasks.registry import register_task
 _BODY_FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
 
 
+@register_task("index_skill_discovery_embedding")
+def index_skill_discovery_embedding(version_id: str, force: bool = False):
+    from apps.skills.discovery import index_skill_version
+
+    indexed = index_skill_version(version_id, force=force)
+    return str(indexed.id) if indexed else None
+
+
 def _staleness_email_html(
     skill_title: str,
     department_name: str,

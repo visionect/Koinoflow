@@ -111,13 +111,13 @@ class VertexEmbeddingClient:
 
     def _get_client(self):
         if self._client is None:
-            from apps.connectors.capture.llm import GeminiProvider
+            from apps.connectors.capture.llm import GeminiProvider, _resolve_vertex_project
 
-            # Reuse Capture's Vertex client setup so local service-account
-            # handling stays centralized.
+            # Reuse Capture's Vertex client setup so service-account handling
+            # stays centralized across generation and discovery embeddings.
             self._client = GeminiProvider(
                 model=self.config.model,
-                project=settings.VERTEX_PROJECT_ID,
+                project=_resolve_vertex_project(settings, settings.VERTEX_PROJECT_ID),
                 location=settings.VERTEX_LOCATION,
             )._get_client()
         return self._client
@@ -200,8 +200,12 @@ def index_skill_version(version_id: str, *, force: bool = False) -> SkillDiscove
 
 def queue_skill_discovery_embedding(version_id: str, *, force: bool = False) -> None:
     try:
-        from apps.skills.celery_tasks import index_skill_discovery_embedding_task
+        from tasks import task_backend
 
-        index_skill_discovery_embedding_task.delay(str(version_id), force=force)
+        task_backend.enqueue(
+            "index_skill_discovery_embedding",
+            version_id=str(version_id),
+            force=force,
+        )
     except Exception:
         logger.warning("Failed to queue skill discovery embedding", exc_info=True)
