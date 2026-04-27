@@ -38,10 +38,11 @@ function isDeployedToAgent(
 
 function TokenReveal({ agent }: { agent: CreatedAgent | null }) {
   if (!agent) return null
+  const token = agent.token
 
   async function copyToken() {
     try {
-      await navigator.clipboard.writeText(agent.token)
+      await navigator.clipboard.writeText(token)
       toast.success("Agent token copied")
     } catch {
       toast.error("Clipboard access was blocked")
@@ -52,7 +53,7 @@ function TokenReveal({ agent }: { agent: CreatedAgent | null }) {
     <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
       <p className="font-medium">Save this rotated token now. It will not be shown again.</p>
       <div className="mt-2 flex items-center gap-2 rounded-md bg-background p-2 font-mono text-xs text-foreground">
-        <code className="min-w-0 flex-1 break-all">{agent.token}</code>
+        <code className="min-w-0 flex-1 break-all">{token}</code>
         <Button size="sm" variant="outline" onClick={() => void copyToken()}>
           <CopyIcon aria-hidden />
           Copy
@@ -255,7 +256,7 @@ export function AgentDetailPage() {
                     <TableRow key={skill.id}>
                       <TableCell>
                         <Link
-                          to={buildWorkspacePath(workspace, `/skills/${skill.slug}`)}
+                          to={buildWorkspacePath(workspace, `/agents/skills/${skill.slug}`)}
                           className="block hover:underline"
                         >
                           <div className="font-medium">{skill.title}</div>
@@ -266,13 +267,18 @@ export function AgentDetailPage() {
                       <TableCell>{formatRelativeDate(skill.updated_at)}</TableCell>
                       <TableCell className="space-x-2 text-right">
                         <Button asChild size="sm" variant="outline">
-                          <Link to={buildWorkspacePath(workspace, `/skills/${skill.slug}`)}>
+                          <Link to={buildWorkspacePath(workspace, `/agents/skills/${skill.slug}`)}>
                             <PencilIcon aria-hidden />
                             Open editor
                           </Link>
                         </Button>
                         <Button asChild size="sm" variant="ghost">
-                          <Link to={buildWorkspacePath(workspace, `/skills/${skill.slug}/history`)}>
+                          <Link
+                            to={buildWorkspacePath(
+                              workspace,
+                              `/agents/skills/${skill.slug}/history`,
+                            )}
+                          >
                             <HistoryIcon aria-hidden />
                             History
                           </Link>
@@ -314,7 +320,7 @@ export function AgentDetailPage() {
                     <TableRow key={event.id}>
                       <TableCell>
                         <Link
-                          to={buildWorkspacePath(workspace, `/skills/${event.skill_slug}`)}
+                          to={buildWorkspacePath(workspace, `/agents/skills/${event.skill_slug}`)}
                           className="font-medium hover:underline"
                         >
                           {event.skill_title}

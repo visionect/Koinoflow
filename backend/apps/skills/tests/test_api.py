@@ -8,7 +8,8 @@ from django.test import Client
 from django.utils import timezone
 from oauth2_provider.models import AccessToken, Application
 
-from apps.orgs.models import ApiKey, CoreSettings
+from apps.connectors.tests.factories import CaptureCandidateFactory, ConnectorCredentialFactory
+from apps.orgs.models import SYSTEM_KIND_AGENTS, ApiKey, CoreSettings
 from apps.orgs.tests.factories import DepartmentFactory, TeamFactory
 from apps.skills.discovery import build_skill_indexed_text
 from apps.skills.enums import StatusChoices, VisibilityChoices
@@ -63,6 +64,63 @@ class TestCreateSkill:
 
 @pytest.mark.django_db
 class TestGetProcess:
+    def test_get_skill_disambiguates_agent_system_slug(self, auth_client, admin_membership):
+        ws = admin_membership.workspace
+        team = TeamFactory(workspace=ws, slug="eng")
+        dept = DepartmentFactory(team=team, slug="frontend")
+        agent_team = TeamFactory(
+            workspace=ws,
+            slug="agents",
+            name="Agents",
+            system_kind=SYSTEM_KIND_AGENTS,
+        )
+        agent_dept = DepartmentFactory(
+            team=agent_team,
+            slug="agents",
+            name="Agents",
+            system_kind=SYSTEM_KIND_AGENTS,
+        )
+        normal_skill = SkillFactory(
+            department=dept,
+            slug="writing-mcp-servers",
+            title="Department Skill",
+            status=StatusChoices.PUBLISHED,
+        )
+        agent_skill = SkillFactory(
+            department=agent_dept,
+            slug="writing-mcp-servers",
+            title="Agent Skill",
+            status=StatusChoices.PUBLISHED,
+        )
+        normal_version = SkillVersionFactory(
+            skill=normal_skill,
+            version_number=1,
+            content_md="# Department Skill",
+        )
+        agent_version = SkillVersionFactory(
+            skill=agent_skill,
+            version_number=1,
+            content_md="# Agent Skill",
+        )
+        normal_skill.current_version = normal_version
+        normal_skill.save()
+        agent_skill.current_version = agent_version
+        agent_skill.save()
+
+        resp = auth_client.get("/api/v1/skills/writing-mcp-servers")
+        assert resp.status_code == 200
+        assert resp.json()["title"] == "Department Skill"
+        assert resp.json()["system_kind"] == ""
+
+        resp = auth_client.get("/api/v1/skills/writing-mcp-servers?system_kind=agents")
+        assert resp.status_code == 200
+        assert resp.json()["title"] == "Agent Skill"
+        assert resp.json()["system_kind"] == SYSTEM_KIND_AGENTS
+
+        resp = auth_client.get("/api/v1/skills/writing-mcp-servers/versions?system_kind=agents")
+        assert resp.status_code == 200
+        assert resp.json()["items"][0]["id"] == str(agent_version.id)
+
     def test_get_skill_published(self, auth_client, admin_membership):
         ws = admin_membership.workspace
         team = TeamFactory(workspace=ws, slug="eng")
@@ -311,6 +369,20 @@ class TestDeleteSkill:
         assert resp.status_code == 200
         assert resp.json() == {"ok": True}
         assert not Skill.objects.filter(slug="deploy").exists()
+
+    def test_delete_skill_clears_promoted_capture_candidate(self, auth_client, admin_membership):
+        ws = admin_membership.workspace
+        team = TeamFactory(workspace=ws, slug="eng")
+        dept = DepartmentFactory(team=team, slug="frontend")
+        skill = SkillFactory(department=dept, slug="deploy")
+        credential = ConnectorCredentialFactory(workspace=ws)
+        candidate = CaptureCandidateFactory(credential=credential, promoted_skill=skill)
+
+        resp = auth_client.delete("/api/v1/skills/deploy")
+
+        assert resp.status_code == 200
+        candidate.refresh_from_db()
+        assert candidate.promoted_skill is None
 
 
 @pytest.mark.django_db

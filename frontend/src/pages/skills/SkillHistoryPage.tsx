@@ -7,7 +7,7 @@ import {
   CornerUpLeftIcon,
   UserIcon,
 } from "lucide-react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useLocation, useParams } from "react-router-dom"
 
 import {
   useFileDiff,
@@ -15,6 +15,7 @@ import {
   useRevertVersion,
   useVersionDiff,
   useVersions,
+  type SkillSystemKind,
 } from "@/api/client"
 import { FileDiffSummary, UnifiedDiffViewer } from "@/components/shared/DiffViewer"
 import { EmptyState } from "@/components/shared/EmptyState"
@@ -45,9 +46,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { SkillVersionBrief } from "@/types"
 
 export function SkillHistoryPage() {
+  const location = useLocation()
   const { workspace, skillSlug } = useParams<{ workspace: string; skillSlug: string }>()
-  const skillQuery = useSkill(skillSlug ?? "")
-  const versionsQuery = useVersions(skillSlug ?? "")
+  const skillSystemKind: SkillSystemKind | undefined = location.pathname.includes("/agents/skills/")
+    ? "agents"
+    : undefined
+  const skillQuery = useSkill(skillSlug ?? "", skillSystemKind)
+  const versionsQuery = useVersions(skillSlug ?? "", skillSystemKind)
+  const isAgentSkill = skillSystemKind === "agents" || skillQuery.data?.system_kind === "agents"
 
   const [selectedVersionNumber, setSelectedVersionNumber] = React.useState<number | null>(null)
   const [revertDialogOpen, setRevertDialogOpen] = React.useState(false)
@@ -117,7 +123,14 @@ export function SkillHistoryPage() {
   return (
     <div className="space-y-6">
       <Button asChild size="sm" variant="ghost">
-        <Link to={buildWorkspacePath(workspace, `/skills/${skillQuery.data.slug}`)}>
+        <Link
+          to={buildWorkspacePath(
+            workspace,
+            isAgentSkill
+              ? `/agents/skills/${skillQuery.data.slug}`
+              : `/skills/${skillQuery.data.slug}`,
+          )}
+        >
           <ArrowLeftIcon aria-hidden />
           Back to skill
         </Link>
@@ -149,6 +162,7 @@ export function SkillHistoryPage() {
                   key={version.id}
                   version={version}
                   skillSlug={skillQuery.data.slug}
+                  systemKind={skillSystemKind}
                   isPublished={version.version_number === publishedVersionNumber}
                   isSelected={version.version_number === selectedVersionNumber}
                   onSelect={() => setSelectedVersionNumber(version.version_number)}
@@ -221,6 +235,7 @@ export function SkillHistoryPage() {
                   onOpenChange={setRevertDialogOpen}
                   targetVersionNumber={selectedVersion.version_number}
                   skillSlug={skillQuery.data.slug}
+                  systemKind={skillSystemKind}
                   onSuccess={() => {
                     setSelectedVersionNumber(null)
                   }}
@@ -242,6 +257,7 @@ export function SkillHistoryPage() {
 type HistoryTimelineItemProps = {
   version: SkillVersionBrief
   skillSlug: string
+  systemKind?: SkillSystemKind
   isPublished: boolean
   isSelected: boolean
   onSelect: () => void
@@ -250,6 +266,7 @@ type HistoryTimelineItemProps = {
 function HistoryTimelineItem({
   version,
   skillSlug,
+  systemKind,
   isPublished,
   isSelected,
   onSelect,
@@ -344,7 +361,11 @@ function HistoryTimelineItem({
             </CardContent>
             {showDiff ? (
               <div className="border-t px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                <InlineDiffBlock skillSlug={skillSlug} versionNumber={version.version_number} />
+                <InlineDiffBlock
+                  skillSlug={skillSlug}
+                  versionNumber={version.version_number}
+                  systemKind={systemKind}
+                />
               </div>
             ) : null}
           </Card>
@@ -357,11 +378,12 @@ function HistoryTimelineItem({
 type InlineDiffBlockProps = {
   skillSlug: string
   versionNumber: number
+  systemKind?: SkillSystemKind
 }
 
-function InlineDiffBlock({ skillSlug, versionNumber }: InlineDiffBlockProps) {
-  const diffQuery = useVersionDiff(skillSlug, versionNumber)
-  const fileDiffQuery = useFileDiff(skillSlug, versionNumber)
+function InlineDiffBlock({ skillSlug, versionNumber, systemKind }: InlineDiffBlockProps) {
+  const diffQuery = useVersionDiff(skillSlug, versionNumber, systemKind)
+  const fileDiffQuery = useFileDiff(skillSlug, versionNumber, systemKind)
 
   if (diffQuery.isLoading) {
     return (
@@ -416,6 +438,7 @@ type RevertConfirmDialogProps = {
   onOpenChange: (open: boolean) => void
   targetVersionNumber: number
   skillSlug: string
+  systemKind?: SkillSystemKind
   onSuccess: () => void
 }
 
@@ -424,9 +447,10 @@ function RevertConfirmDialog({
   onOpenChange,
   targetVersionNumber,
   skillSlug,
+  systemKind,
   onSuccess,
 }: RevertConfirmDialogProps) {
-  const revertMutation = useRevertVersion(skillSlug)
+  const revertMutation = useRevertVersion(skillSlug, systemKind)
 
   async function handleConfirm() {
     await revertMutation.mutateAsync({ targetVersionNumber, payload: {} })

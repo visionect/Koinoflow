@@ -500,7 +500,7 @@ export function AgentsPage() {
                     <TableRow key={skill.id}>
                       <TableCell>
                         <Link
-                          to={buildWorkspacePath(workspace, `/skills/${skill.slug}`)}
+                          to={buildWorkspacePath(workspace, `/agents/skills/${skill.slug}`)}
                           className="block hover:underline"
                         >
                           <div className="font-medium">{skill.title}</div>
@@ -515,13 +515,18 @@ export function AgentsPage() {
                       <TableCell>{formatRelativeDate(skill.updated_at)}</TableCell>
                       <TableCell className="space-x-2 text-right">
                         <Button asChild size="sm" variant="outline">
-                          <Link to={buildWorkspacePath(workspace, `/skills/${skill.slug}`)}>
+                          <Link to={buildWorkspacePath(workspace, `/agents/skills/${skill.slug}`)}>
                             <PencilIcon aria-hidden />
                             Open editor
                           </Link>
                         </Button>
                         <Button asChild size="sm" variant="ghost">
-                          <Link to={buildWorkspacePath(workspace, `/skills/${skill.slug}/history`)}>
+                          <Link
+                            to={buildWorkspacePath(
+                              workspace,
+                              `/agents/skills/${skill.slug}/history`,
+                            )}
+                          >
                             <HistoryIcon aria-hidden />
                             History
                           </Link>

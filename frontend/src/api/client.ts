@@ -81,6 +81,7 @@ export class ApiError extends Error {
 }
 
 type SearchValue = string | number | boolean | null | undefined
+export type SkillSystemKind = "agents"
 
 function getCsrfToken() {
   if (typeof document === "undefined") {
@@ -109,6 +110,15 @@ function buildSearchParams(params: Record<string, SearchValue>) {
   }
 
   return searchParams.toString()
+}
+
+function buildSkillScopeQuery(systemKind?: SkillSystemKind) {
+  const query = buildSearchParams({ system_kind: systemKind })
+  return query ? `?${query}` : ""
+}
+
+function skillScopeKey(systemKind?: SkillSystemKind) {
+  return systemKind ?? "default"
 }
 
 function extractErrorMessage(response: Response, payload: unknown) {
@@ -206,18 +216,20 @@ export const queryKeys = {
   },
   skills: {
     all: (filters?: ProcessListFilters) => ["skills", filters ?? {}] as const,
-    detail: (slug: string) => ["skills", "detail", slug] as const,
-    versions: (slug: string) => ["skills", "versions", slug] as const,
-    version: (slug: string, versionNumber: number) =>
-      ["skills", "versions", slug, versionNumber] as const,
-    versionDiff: (slug: string, versionNumber: number) =>
-      ["skills", "versions", slug, versionNumber, "diff"] as const,
-    files: (slug: string, versionNumber: number) =>
-      ["skills", "files", slug, versionNumber] as const,
-    file: (slug: string, versionNumber: number, path: string) =>
-      ["skills", "files", slug, versionNumber, path] as const,
-    fileDiff: (slug: string, versionNumber: number) =>
-      ["skills", "files", slug, versionNumber, "diff"] as const,
+    detail: (slug: string, systemKind?: SkillSystemKind) =>
+      ["skills", "detail", slug, skillScopeKey(systemKind)] as const,
+    versions: (slug: string, systemKind?: SkillSystemKind) =>
+      ["skills", "versions", slug, skillScopeKey(systemKind)] as const,
+    version: (slug: string, versionNumber: number, systemKind?: SkillSystemKind) =>
+      ["skills", "versions", slug, versionNumber, skillScopeKey(systemKind)] as const,
+    versionDiff: (slug: string, versionNumber: number, systemKind?: SkillSystemKind) =>
+      ["skills", "versions", slug, versionNumber, "diff", skillScopeKey(systemKind)] as const,
+    files: (slug: string, versionNumber: number, systemKind?: SkillSystemKind) =>
+      ["skills", "files", slug, versionNumber, skillScopeKey(systemKind)] as const,
+    file: (slug: string, versionNumber: number, path: string, systemKind?: SkillSystemKind) =>
+      ["skills", "files", slug, versionNumber, path, skillScopeKey(systemKind)] as const,
+    fileDiff: (slug: string, versionNumber: number, systemKind?: SkillSystemKind) =>
+      ["skills", "files", slug, versionNumber, "diff", skillScopeKey(systemKind)] as const,
   },
   settings: {
     effective: (teamId?: string, departmentId?: string) =>
@@ -535,10 +547,10 @@ export function useSkills(filters?: ProcessListFilters) {
   })
 }
 
-export function useSkill(slug: string) {
+export function useSkill(slug: string, systemKind?: SkillSystemKind) {
   return useQuery({
-    queryKey: queryKeys.skills.detail(slug),
-    queryFn: () => apiFetch<SkillDetail>(`/skills/${slug}`),
+    queryKey: queryKeys.skills.detail(slug, systemKind),
+    queryFn: () => apiFetch<SkillDetail>(`/skills/${slug}${buildSkillScopeQuery(systemKind)}`),
     enabled: Boolean(slug),
   })
 }
@@ -562,45 +574,48 @@ export function useCreateSkill() {
   })
 }
 
-export function useUpdateSkill(slug: string) {
+export function useUpdateSkill(slug: string, systemKind?: SkillSystemKind) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (payload: UpdateSkillInput) =>
-      apiFetch<SkillDetail>(`/skills/${slug}`, {
+      apiFetch<SkillDetail>(`/skills/${slug}${buildSkillScopeQuery(systemKind)}`, {
         method: "PATCH",
         body: JSON.stringify(payload),
       }),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["skills"] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug, systemKind) }),
       ])
     },
   })
 }
 
-export function useUnshareSkillFromMyTeam(slug: string) {
+export function useUnshareSkillFromMyTeam(slug: string, systemKind?: SkillSystemKind) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: () =>
-      apiFetch<SkillDetail>(`/skills/${slug}/shared-with/my-team`, {
-        method: "DELETE",
-      }),
+      apiFetch<SkillDetail>(
+        `/skills/${slug}/shared-with/my-team${buildSkillScopeQuery(systemKind)}`,
+        {
+          method: "DELETE",
+        },
+      ),
     onSuccess: async (updated) => {
-      queryClient.setQueryData(queryKeys.skills.detail(slug), updated)
+      queryClient.setQueryData(queryKeys.skills.detail(slug, systemKind), updated)
       await queryClient.invalidateQueries({ queryKey: ["skills"] })
     },
   })
 }
 
-export function useDeleteSkill() {
+export function useDeleteSkill(systemKind?: SkillSystemKind) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (slug: string) =>
-      apiFetch<ApiOkResponse>(`/skills/${slug}`, {
+      apiFetch<ApiOkResponse>(`/skills/${slug}${buildSkillScopeQuery(systemKind)}`, {
         method: "DELETE",
       }),
     onSuccess: async () => {
@@ -609,12 +624,12 @@ export function useDeleteSkill() {
   })
 }
 
-export function useVersions(slug: string) {
+export function useVersions(slug: string, systemKind?: SkillSystemKind) {
   return useQuery({
-    queryKey: queryKeys.skills.versions(slug),
+    queryKey: queryKeys.skills.versions(slug, systemKind),
     queryFn: async () => {
       const res = await apiFetch<{ items: SkillVersionBrief[]; count: number }>(
-        `/skills/${slug}/versions`,
+        `/skills/${slug}/versions${buildSkillScopeQuery(systemKind)}`,
       )
       return res.items
     },
@@ -622,74 +637,104 @@ export function useVersions(slug: string) {
   })
 }
 
-export function useVersion(slug: string, versionNumber: number | null) {
+export function useVersion(
+  slug: string,
+  versionNumber: number | null,
+  systemKind?: SkillSystemKind,
+) {
   return useQuery({
-    queryKey: queryKeys.skills.version(slug, versionNumber ?? 0),
-    queryFn: () => apiFetch<SkillVersion>(`/skills/${slug}/versions/${versionNumber}`),
+    queryKey: queryKeys.skills.version(slug, versionNumber ?? 0, systemKind),
+    queryFn: () =>
+      apiFetch<SkillVersion>(
+        `/skills/${slug}/versions/${versionNumber}${buildSkillScopeQuery(systemKind)}`,
+      ),
     enabled: Boolean(slug) && versionNumber !== null,
   })
 }
 
-export function useVersionDiff(slug: string, versionNumber: number | null) {
+export function useVersionDiff(
+  slug: string,
+  versionNumber: number | null,
+  systemKind?: SkillSystemKind,
+) {
   return useQuery({
-    queryKey: queryKeys.skills.versionDiff(slug, versionNumber ?? 0),
-    queryFn: () => apiFetch<VersionDiff>(`/skills/${slug}/versions/${versionNumber}/diff`),
+    queryKey: queryKeys.skills.versionDiff(slug, versionNumber ?? 0, systemKind),
+    queryFn: () =>
+      apiFetch<VersionDiff>(
+        `/skills/${slug}/versions/${versionNumber}/diff${buildSkillScopeQuery(systemKind)}`,
+      ),
     enabled: Boolean(slug) && versionNumber !== null && versionNumber > 1,
   })
 }
 
-export function useVersionFiles(slug: string, versionNumber: number | null) {
+export function useVersionFiles(
+  slug: string,
+  versionNumber: number | null,
+  systemKind?: SkillSystemKind,
+) {
   return useQuery({
-    queryKey: queryKeys.skills.files(slug, versionNumber ?? 0),
-    queryFn: () => apiFetch<VersionFile[]>(`/skills/${slug}/versions/${versionNumber}/files`),
+    queryKey: queryKeys.skills.files(slug, versionNumber ?? 0, systemKind),
+    queryFn: () =>
+      apiFetch<VersionFile[]>(
+        `/skills/${slug}/versions/${versionNumber}/files${buildSkillScopeQuery(systemKind)}`,
+      ),
     enabled: Boolean(slug) && versionNumber !== null,
   })
 }
 
-export function useVersionFile(slug: string, versionNumber: number | null, path: string | null) {
+export function useVersionFile(
+  slug: string,
+  versionNumber: number | null,
+  path: string | null,
+  systemKind?: SkillSystemKind,
+) {
   return useQuery({
-    queryKey: queryKeys.skills.file(slug, versionNumber ?? 0, path ?? ""),
+    queryKey: queryKeys.skills.file(slug, versionNumber ?? 0, path ?? "", systemKind),
     queryFn: () =>
       apiFetch<VersionFileDetail>(
-        `/skills/${slug}/versions/${versionNumber}/files/${encodeURIComponent(path ?? "")}`,
+        `/skills/${slug}/versions/${versionNumber}/files/${encodeURIComponent(path ?? "")}${buildSkillScopeQuery(systemKind)}`,
       ),
     enabled: Boolean(slug) && versionNumber !== null && Boolean(path),
   })
 }
 
-export function useFileDiff(slug: string, versionNumber: number | null) {
+export function useFileDiff(
+  slug: string,
+  versionNumber: number | null,
+  systemKind?: SkillSystemKind,
+) {
   return useQuery({
-    queryKey: queryKeys.skills.fileDiff(slug, versionNumber ?? 0),
+    queryKey: queryKeys.skills.fileDiff(slug, versionNumber ?? 0, systemKind),
     queryFn: () =>
       apiFetch<{
         old_version_number: number
         new_version_number: number
         entries: FileDiffEntry[]
-      }>(`/skills/${slug}/versions/${versionNumber}/file-diff`),
+      }>(`/skills/${slug}/versions/${versionNumber}/file-diff${buildSkillScopeQuery(systemKind)}`),
     enabled: Boolean(slug) && versionNumber !== null && versionNumber > 1,
   })
 }
 
-export function useCreateVersion(slug: string) {
+export function useCreateVersion(slug: string, systemKind?: SkillSystemKind) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (payload: CreateVersionInput) =>
-      apiFetch<SkillVersion>(`/skills/${slug}/versions`, {
+      apiFetch<SkillVersion>(`/skills/${slug}/versions${buildSkillScopeQuery(systemKind)}`, {
         method: "POST",
         body: JSON.stringify(payload),
       }),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug, systemKind) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug, systemKind) }),
         queryClient.invalidateQueries({ queryKey: ["skills", "files", slug] }),
       ])
     },
   })
 }
 
-export function useRevertVersion(slug: string) {
+export function useRevertVersion(slug: string, systemKind?: SkillSystemKind) {
   const queryClient = useQueryClient()
 
   return useMutation({
@@ -700,68 +745,78 @@ export function useRevertVersion(slug: string) {
       targetVersionNumber: number
       payload: RevertVersionInput
     }) =>
-      apiFetch<SkillVersion>(`/skills/${slug}/versions/${targetVersionNumber}/revert`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      }),
+      apiFetch<SkillVersion>(
+        `/skills/${slug}/versions/${targetVersionNumber}/revert${buildSkillScopeQuery(systemKind)}`,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
+      ),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug, systemKind) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug, systemKind) }),
         queryClient.invalidateQueries({ queryKey: ["skills", "files", slug] }),
       ])
     },
   })
 }
 
-export function useUpdateVersionSummary(slug: string, versionNumber: number | null) {
+export function useUpdateVersionSummary(
+  slug: string,
+  versionNumber: number | null,
+  systemKind?: SkillSystemKind,
+) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (payload: UpdateVersionSummaryInput) =>
-      apiFetch<SkillVersionBrief>(`/skills/${slug}/versions/${versionNumber}`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-      }),
+      apiFetch<SkillVersionBrief>(
+        `/skills/${slug}/versions/${versionNumber}${buildSkillScopeQuery(systemKind)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(payload),
+        },
+      ),
     onSuccess: async () => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug, systemKind) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug, systemKind) }),
       ])
     },
   })
 }
 
-export function usePublishSkill(slug: string) {
+export function usePublishSkill(slug: string, systemKind?: SkillSystemKind) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: () =>
-      apiFetch<SkillDetail>(`/skills/${slug}/publish`, {
+      apiFetch<SkillDetail>(`/skills/${slug}/publish${buildSkillScopeQuery(systemKind)}`, {
         method: "POST",
       }),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["skills"] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug, systemKind) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug, systemKind) }),
       ])
     },
   })
 }
 
-export function useReviewSkill(slug: string) {
+export function useReviewSkill(slug: string, systemKind?: SkillSystemKind) {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: () =>
-      apiFetch<SkillDetail>(`/skills/${slug}/review`, {
+      apiFetch<SkillDetail>(`/skills/${slug}/review${buildSkillScopeQuery(systemKind)}`, {
         method: "POST",
       }),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["skills"] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug, systemKind) }),
       ])
     },
   })

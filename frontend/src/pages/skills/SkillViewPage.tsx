@@ -18,7 +18,7 @@ import {
   UserMinusIcon,
   XIcon,
 } from "lucide-react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import {
@@ -41,6 +41,8 @@ import {
   useVersions,
   useCreateVersion,
   useWorkspaceMembers,
+  type SkillSystemKind,
+  apiFetch,
 } from "@/api/client"
 import { FileEditor } from "@/components/editor/FileEditor"
 import { FrontmatterForm } from "@/components/editor/FrontmatterForm"
@@ -62,7 +64,6 @@ import { useAuth } from "@/hooks/useAuth"
 import { useSkillImport } from "@/hooks/use-skill-import"
 import { buildWorkspacePath, formatRelativeDate, getDisplayName } from "@/lib/format"
 import { parseFrontmatter, serializeFrontmatter } from "@/lib/frontmatter"
-import { apiFetch } from "@/api/client"
 import {
   EMPTY_KOINOFLOW_METADATA,
   type KoinoflowMetadata,
@@ -155,27 +156,33 @@ function resetFileEditorState(
 
 export function SkillViewPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { workspace, skillSlug } = useParams<{ workspace: string; skillSlug: string }>()
   const { user, isAdmin, isEditor } = useAuth()
+  const skillSystemKind: SkillSystemKind | undefined = location.pathname.includes("/agents/skills/")
+    ? "agents"
+    : undefined
+  const skillScopeQuery = skillSystemKind ? "?system_kind=agents" : ""
 
-  const skillQuery = useSkill(skillSlug ?? "")
-  const isAgentSkill = skillQuery.data?.system_kind === "agents"
+  const skillQuery = useSkill(skillSlug ?? "", skillSystemKind)
+  const isAgentSkill = skillSystemKind === "agents" || skillQuery.data?.system_kind === "agents"
   const canWrite = isAgentSkill
     ? isAdmin
     : skillQuery.data?.visibility === "workspace"
       ? isAdmin
       : isEditor
-  const versionsQuery = useVersions(skillSlug ?? "")
+  const versionsQuery = useVersions(skillSlug ?? "", skillSystemKind)
   const membersQuery = useWorkspaceMembers()
-  const updateSkill = useUpdateSkill(skillSlug ?? "")
-  const publishSkill = usePublishSkill(skillSlug ?? "")
-  const reviewSkill = useReviewSkill(skillSlug ?? "")
-  const deleteSkill = useDeleteSkill()
-  const unshareFromMyTeam = useUnshareSkillFromMyTeam(skillSlug ?? "")
-  const createVersion = useCreateVersion(skillSlug ?? "")
+  const updateSkill = useUpdateSkill(skillSlug ?? "", skillSystemKind)
+  const publishSkill = usePublishSkill(skillSlug ?? "", skillSystemKind)
+  const reviewSkill = useReviewSkill(skillSlug ?? "", skillSystemKind)
+  const deleteSkill = useDeleteSkill(skillSystemKind)
+  const unshareFromMyTeam = useUnshareSkillFromMyTeam(skillSlug ?? "", skillSystemKind)
+  const createVersion = useCreateVersion(skillSlug ?? "", skillSystemKind)
   const updateVersionSummary = useUpdateVersionSummary(
     skillSlug ?? "",
     versionsQuery.data?.[0]?.version_number ?? null,
+    skillSystemKind,
   )
 
   const latestVersionNumber = versionsQuery.data?.[0]?.version_number ?? null
@@ -186,6 +193,7 @@ export function SkillViewPage() {
   const latestVersionQuery = useVersion(
     skillSlug ?? "",
     needsLatestDraft ? latestVersionNumber : null,
+    skillSystemKind,
   )
 
   const departmentLookupQuery = useDepartments()
@@ -248,9 +256,7 @@ export function SkillViewPage() {
   const allSkillsQuery = useSkills({ limit: 200 })
   const prerequisiteSuggestions = React.useMemo(
     () =>
-      (allSkillsQuery.data?.items ?? [])
-        .map((p) => p.slug)
-        .filter((slug) => slug !== skillSlug),
+      (allSkillsQuery.data?.items ?? []).map((p) => p.slug).filter((slug) => slug !== skillSlug),
     [allSkillsQuery.data, skillSlug],
   )
 
@@ -312,7 +318,7 @@ export function SkillViewPage() {
     displayVersion.version_number !== skillQuery.data?.current_version?.version_number
 
   const viewVersionNumber = displayVersion?.version_number ?? null
-  const viewFilesQuery = useVersionFiles(skillSlug ?? "", viewVersionNumber)
+  const viewFilesQuery = useVersionFiles(skillSlug ?? "", viewVersionNumber, skillSystemKind)
   // New files added locally have an empty id — they don't exist on the
   // server yet, so don't try to fetch them (would 404 as "File not found").
   const selectedFileIsLocalOnly =
@@ -321,11 +327,13 @@ export function SkillViewPage() {
     skillSlug ?? "",
     viewVersionNumber,
     isEditing && !selectedFileIsLocalOnly ? selectedFilePath : null,
+    skillSystemKind,
   )
   const viewingFileQuery = useVersionFile(
     skillSlug ?? "",
     viewVersionNumber,
     !isEditing ? selectedFilePath : null,
+    skillSystemKind,
   )
 
   React.useEffect(() => {
@@ -476,7 +484,7 @@ export function SkillViewPage() {
           }
           if (!payload && viewVersionNumber !== null) {
             const detail = await apiFetch<VersionFileDetail>(
-              `/skills/${skillSlug}/versions/${viewVersionNumber}/files/${encodeURIComponent(meta.path)}`,
+              `/skills/${skillSlug}/versions/${viewVersionNumber}/files/${encodeURIComponent(meta.path)}${skillScopeQuery}`,
             )
             payload = {
               path: detail.path,
@@ -540,6 +548,7 @@ export function SkillViewPage() {
     markdown,
     skillQuery.data,
     skillSlug,
+    skillScopeQuery,
     requireChangeSummary,
     updateSkill,
     viewVersionNumber,
@@ -674,7 +683,9 @@ export function SkillViewPage() {
     try {
       await deleteSkill.mutateAsync(skillQuery.data.slug)
       toast.success("Skill deleted")
-      navigate(buildWorkspacePath(workspace, "/skills"), { replace: true })
+      navigate(buildWorkspacePath(workspace, isAgentSkill ? "/agents" : "/skills"), {
+        replace: true,
+      })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to delete skill")
     }
@@ -695,7 +706,7 @@ export function SkillViewPage() {
 
     const skillName = skillQuery.data.slug
     try {
-      const response = await fetch(`/api/v1/skills/${skillName}/export`, {
+      const response = await fetch(`/api/v1/skills/${skillName}/export${skillScopeQuery}`, {
         credentials: "include",
       })
       if (!response.ok) throw new Error("Export failed")
@@ -715,9 +726,7 @@ export function SkillViewPage() {
     return (
       <ErrorState
         message={
-          skillQuery.error instanceof Error
-            ? skillQuery.error.message
-            : "Unable to load skill"
+          skillQuery.error instanceof Error ? skillQuery.error.message : "Unable to load skill"
         }
         onRetry={() => void skillQuery.refetch()}
       />
@@ -761,9 +770,7 @@ export function SkillViewPage() {
             {isEditing ? (
               <>
                 <Button
-                  disabled={
-                    !hasUnsavedChanges || createVersion.isPending || updateSkill.isPending
-                  }
+                  disabled={!hasUnsavedChanges || createVersion.isPending || updateSkill.isPending}
                   onClick={() => void handleSave()}
                   title="Save new version (⌘/Ctrl+S)"
                 >
@@ -776,9 +783,7 @@ export function SkillViewPage() {
                 </Button>
                 <Button
                   variant="outline"
-                  disabled={
-                    !hasUnsavedChanges || createVersion.isPending || updateSkill.isPending
-                  }
+                  disabled={!hasUnsavedChanges || createVersion.isPending || updateSkill.isPending}
                   onClick={() => void handleReviewAndPublish()}
                   title="Save and return to view mode"
                 >
@@ -832,7 +837,9 @@ export function SkillViewPage() {
                     navigate(
                       buildWorkspacePath(
                         workspace,
-                        `/skills/${skillQuery.data?.slug}/history`,
+                        isAgentSkill
+                          ? `/agents/skills/${skillQuery.data?.slug}/history`
+                          : `/skills/${skillQuery.data?.slug}/history`,
                       ),
                     )
                   }
@@ -1221,10 +1228,7 @@ export function SkillViewPage() {
                   <p className="font-medium">{getDisplayName(skillQuery.data.owner)}</p>
                 </div>
                 {isAgentSkill ? (
-                  <AgentDeploymentBlock
-                    skillSlug={skillQuery.data.slug}
-                    canWrite={canWrite}
-                  />
+                  <AgentDeploymentBlock skillSlug={skillQuery.data.slug} canWrite={canWrite} />
                 ) : (
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -1332,7 +1336,9 @@ export function SkillViewPage() {
                   <Link
                     to={buildWorkspacePath(
                       workspace,
-                      `/skills/${skillQuery.data.slug}/history`,
+                      isAgentSkill
+                        ? `/agents/skills/${skillQuery.data.slug}/history`
+                        : `/skills/${skillQuery.data.slug}/history`,
                     )}
                   >
                     <HistoryIcon className="mr-1 size-3" />
@@ -1344,6 +1350,7 @@ export function SkillViewPage() {
                 <VersionTimeline
                   skillSlug={skillQuery.data.slug}
                   publishedVersionNumber={publishedVersionNumber}
+                  systemKind={skillSystemKind}
                 />
               </CardContent>
             </Card>
@@ -1496,13 +1503,7 @@ export function SkillViewPage() {
   )
 }
 
-function AgentDeploymentBlock({
-  skillSlug,
-  canWrite,
-}: {
-  skillSlug: string
-  canWrite: boolean
-}) {
+function AgentDeploymentBlock({ skillSlug, canWrite }: { skillSlug: string; canWrite: boolean }) {
   const deploymentQuery = useAgentSkillDeployment(skillSlug)
   const agentsQuery = useAgents()
   const updateDeployment = useUpdateAgentSkillDeployment(skillSlug)
@@ -1554,8 +1555,7 @@ function AgentDeploymentBlock({
       ? "All agents"
       : `${data.agent_ids.length} selected agent${data.agent_ids.length === 1 ? "" : "s"}`
     : "Loading…"
-  const saveDisabled =
-    updateDeployment.isPending || (!deployToAll && agentIds.size === 0)
+  const saveDisabled = updateDeployment.isPending || (!deployToAll && agentIds.size === 0)
 
   return (
     <div className="space-y-2">
