@@ -18,6 +18,7 @@ from django.core.cache import cache
 from django.test import Client
 
 from apps.accounts.oauth_views import (
+    _DCR_RATE_LIMIT_PER_IP_PER_HOUR,
     _sanitise_client_name,
     _validate_redirect_uri,
 )
@@ -130,9 +131,9 @@ class TestDCRRateLimit:
             HTTP_X_FORWARDED_FOR=ip,
         )
 
-    def test_per_ip_rate_limit_fires_at_11th_request(self):
+    def test_per_ip_rate_limit_fires_after_configured_limit(self):
         client = Client()
-        for i in range(10):
+        for i in range(_DCR_RATE_LIMIT_PER_IP_PER_HOUR):
             resp = self._post(client, "1.2.3.4")
             assert resp.status_code in (200, 201), (i, resp.status_code, resp.content)
         resp = self._post(client, "1.2.3.4")
@@ -141,7 +142,7 @@ class TestDCRRateLimit:
     def test_second_ip_is_not_rate_limited_by_first(self):
         client = Client()
         # Exhaust IP A.
-        for _ in range(10):
+        for _ in range(_DCR_RATE_LIMIT_PER_IP_PER_HOUR):
             self._post(client, "1.2.3.4")
         assert self._post(client, "1.2.3.4").status_code == 429
         # IP B should still be allowed.
@@ -153,7 +154,7 @@ class TestDCRRateLimit:
         key on the real client, not on the LB IP that would make every
         request share a bucket."""
         client = Client()
-        # 10 distinct real clients all going through the same LB IP trailing.
-        for i in range(10):
+        # Distinct real clients all going through the same LB IP trailing.
+        for i in range(_DCR_RATE_LIMIT_PER_IP_PER_HOUR):
             resp = self._post(client, f"10.{i}.0.1, 130.211.0.1, 35.191.0.2")
             assert resp.status_code in (200, 201), (i, resp.status_code)
