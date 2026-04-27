@@ -34,8 +34,8 @@ from oauth2_provider.views import AuthorizationView
 logger = logging.getLogger(__name__)
 
 
-_DCR_RATE_LIMIT_PER_IP_PER_HOUR = 10
-_DCR_GLOBAL_RATE_LIMIT_PER_HOUR = 200
+_DCR_RATE_LIMIT_PER_IP_PER_HOUR = 120
+_DCR_GLOBAL_RATE_LIMIT_PER_HOUR = 2000
 _ALLOWED_URI_SCHEMES = {"https", "cursor", "vscode"}
 _LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 _PROTECTED_CLIENT_NAMES = {
@@ -153,7 +153,7 @@ def authorization_server_metadata(request):
 
 
 def _check_dcr_rate_limit(request):
-    """Cache-based rate limit: 10 registrations per real client IP per hour.
+    """Cache-based rate limit per real client IP.
 
     Also enforces a soft global ceiling to blunt distributed brute-force
     registrations without a WAF in front.
