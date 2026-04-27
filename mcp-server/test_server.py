@@ -10,6 +10,7 @@ os.environ["KOINOFLOW_API_URL"] = "http://testserver/api/v1"
 os.environ.setdefault("KOINOFLOW_API_KEY", "test-key")
 os.environ.setdefault("MCP_APPROVAL_TOKEN_SECRET", "test-approval-secret")
 
+from auth import get_authorization_server_metadata  # noqa: E402
 from server import (  # noqa: E402
     _mcp_client_type,
     _token_info_var,
@@ -19,7 +20,6 @@ from server import (  # noqa: E402
     propose_skill_update,
     read_skill,
 )
-from auth import get_authorization_server_metadata  # noqa: E402
 
 PROCESS_DETAIL = {
     "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
