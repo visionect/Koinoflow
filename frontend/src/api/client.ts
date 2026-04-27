@@ -618,8 +618,18 @@ export function useDeleteSkill(systemKind?: SkillSystemKind) {
       apiFetch<ApiOkResponse>(`/skills/${slug}${buildSkillScopeQuery(systemKind)}`, {
         method: "DELETE",
       }),
-    onSuccess: async () => {
-      await invalidateWorkspaceStructure(queryClient)
+    onSuccess: async (_, slug) => {
+      if (systemKind === "agents") {
+        queryClient.setQueryData<AgentSkill[] | undefined>(queryKeys.agents.skills, (items) =>
+          items?.filter((skill) => skill.slug !== slug),
+        )
+      }
+
+      await Promise.all([
+        invalidateWorkspaceStructure(queryClient),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.skills }),
+        queryClient.invalidateQueries({ queryKey: ["agents", "analytics"] }),
+      ])
     },
   })
 }
