@@ -92,6 +92,8 @@ export function AppRoutes() {
         <Route path="settings/mcp" element={<McpPage />} />
         <Route path="settings/keys" element={<ApiKeysPage />} />
         <Route path="agents" element={<AgentsPage />} />
+        <Route path="agents/skills/:skillSlug" element={<SkillViewPage />} />
+        <Route path="agents/skills/:skillSlug/history" element={<SkillHistoryPage />} />
         <Route path="agents/:agentId" element={<AgentDetailPage />} />
         <Route
           path="capture/connectors"

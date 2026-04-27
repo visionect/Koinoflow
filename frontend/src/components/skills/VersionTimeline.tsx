@@ -1,7 +1,7 @@
 import { UserIcon } from "lucide-react"
 import { useNavigate, useParams } from "react-router-dom"
 
-import { useVersions } from "@/api/client"
+import { useVersions, type SkillSystemKind } from "@/api/client"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -16,10 +16,15 @@ import type { SkillVersionBrief } from "@/types"
 type VersionTimelineProps = {
   skillSlug: string
   publishedVersionNumber: number | null
+  systemKind?: SkillSystemKind
 }
 
-export function VersionTimeline({ skillSlug, publishedVersionNumber }: VersionTimelineProps) {
-  const versionsQuery = useVersions(skillSlug)
+export function VersionTimeline({
+  skillSlug,
+  publishedVersionNumber,
+  systemKind,
+}: VersionTimelineProps) {
+  const versionsQuery = useVersions(skillSlug, systemKind)
   const navigate = useNavigate()
   const { workspace } = useParams<{ workspace: string }>()
 
@@ -42,7 +47,14 @@ export function VersionTimeline({ skillSlug, publishedVersionNumber }: VersionTi
   }
 
   function handleClick() {
-    navigate(buildWorkspacePath(workspace, `/skills/${skillSlug}/history`))
+    navigate(
+      buildWorkspacePath(
+        workspace,
+        systemKind === "agents"
+          ? `/agents/skills/${skillSlug}/history`
+          : `/skills/${skillSlug}/history`,
+      ),
+    )
   }
 
   return (

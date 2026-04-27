@@ -766,30 +766,54 @@ def _set_skill_shared_with(skill, dept_ids, workspace):
     skill.shared_with.set(depts)
 
 
-def _get_skill(request, slug: str, *, allow_draft=True):
+def _normalize_skill_system_kind(system_kind: str | None) -> str:
+    if system_kind in (None, ""):
+        return ""
+    if system_kind == SYSTEM_KIND_AGENTS:
+        return SYSTEM_KIND_AGENTS
+    raise HttpError(400, "Invalid skill system kind")
+
+
+def _get_skill(request, slug: str, *, allow_draft=True, system_kind: str | None = ""):
     """Fetch a skill scoped to the request's workspace."""
     workspace = request.workspace
     if not workspace:
         raise HttpError(403, "No workspace context")
-    try:
-        skill = Skill.objects.select_related(
-            "department__team",
-            "owner",
-            "current_version__authored_by",
-            "current_version__discovery_embedding",
-            "current_version__reverted_from",
-        ).get(slug=slug, department__team__workspace=workspace)
-    except Skill.DoesNotExist:
-        raise HttpError(404, "Skill not found")
-
+    requested_system_kind = _normalize_skill_system_kind(system_kind)
     agent = getattr(request, "agent", None)
+    qs = Skill.objects.select_related(
+        "department__team",
+        "owner",
+        "current_version__authored_by",
+        "current_version__discovery_embedding",
+        "current_version__reverted_from",
+    ).filter(slug=slug, department__team__workspace=workspace)
     if agent is not None:
         from apps.agents.selectors import skills_for_agent
 
-        allowed = skills_for_agent(agent).filter(pk=skill.pk)
-        if not allowed.exists():
-            raise HttpError(404, "Skill not found")
-    elif skill.department.system_kind == SYSTEM_KIND_AGENTS:
+        qs = (
+            skills_for_agent(agent)
+            .select_related(
+                "department__team",
+                "owner",
+                "current_version__authored_by",
+                "current_version__discovery_embedding",
+                "current_version__reverted_from",
+            )
+            .filter(slug=slug)
+        )
+    elif requested_system_kind == SYSTEM_KIND_AGENTS:
+        qs = qs.filter(department__system_kind=SYSTEM_KIND_AGENTS)
+    else:
+        qs = qs.exclude(department__system_kind=SYSTEM_KIND_AGENTS)
+    try:
+        skill = qs.get()
+    except Skill.DoesNotExist:
+        raise HttpError(404, "Skill not found")
+    except Skill.MultipleObjectsReturned:
+        raise HttpError(409, "Skill slug is ambiguous")
+
+    if agent is None and skill.department.system_kind == SYSTEM_KIND_AGENTS:
         is_api_key = hasattr(request, "api_key")
         is_oauth = hasattr(request, "oauth_token")
         membership = getattr(request, "membership", None)
@@ -1164,10 +1188,15 @@ def create_skill(request, payload: CreateSkillIn):
     auth=api_or_session,
     throttle=[ReadThrottle()],
 )
-def get_skill(request, slug: str):
+def get_skill(request, slug: str, system_kind: str | None = ""):
     is_api_key = hasattr(request, "api_key")
     is_oauth = hasattr(request, "oauth_token")
-    skill = _get_skill(request, slug, allow_draft=not (is_api_key or is_oauth))
+    skill = _get_skill(
+        request,
+        slug,
+        allow_draft=not (is_api_key or is_oauth),
+        system_kind=system_kind,
+    )
     if is_api_key:
         allowed = apply_api_key_scope(request.api_key, Skill.objects.filter(pk=skill.pk))
         if not allowed.exists():
@@ -1188,8 +1217,8 @@ def get_skill(request, slug: str):
     throttle=[MutationThrottle()],
 )
 @require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER, RoleChoices.MEMBER)
-def update_skill(request, slug: str, payload: UpdateSkillIn):
-    skill = _get_skill(request, slug)
+def update_skill(request, slug: str, payload: UpdateSkillIn, system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
     check_skill_write(request, skill)
     workspace = request.workspace
     update_fields = ["updated_at"]
@@ -1242,8 +1271,8 @@ def update_skill(request, slug: str, payload: UpdateSkillIn):
 
 @router.delete("/skills/{slug}", auth=api_or_session, throttle=[MutationThrottle()])
 @require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER)
-def delete_skill(request, slug: str):
-    skill = _get_skill(request, slug)
+def delete_skill(request, slug: str, system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
     check_skill_write(request, skill)
     skill.delete()
     return {"ok": True}
@@ -1256,11 +1285,11 @@ def delete_skill(request, slug: str):
     throttle=[MutationThrottle()],
 )
 @require_role(RoleChoices.TEAM_MANAGER)
-def unshare_from_my_team(request, slug: str):
+def unshare_from_my_team(request, slug: str, system_kind: str | None = ""):
     """Remove the requester's team from a skill's shared_with list."""
     from apps.orgs.models import Department
 
-    skill = _get_skill(request, slug)
+    skill = _get_skill(request, slug, system_kind=system_kind)
     membership = getattr(request, "membership", None)
     if not membership or not membership.team_id:
         raise HttpError(400, "No team context")
@@ -1298,12 +1327,12 @@ def unshare_from_my_team(request, slug: str):
     throttle=[CreateAuthThrottle()],
 )
 @require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER, RoleChoices.MEMBER)
-def create_version(request, slug: str, payload: CreateVersionIn):
+def create_version(request, slug: str, payload: CreateVersionIn, system_kind: str | None = ""):
     oauth_token = getattr(request, "oauth_token", None)
     if oauth_token is not None and "skills:write" not in oauth_token.scope.split():
         raise HttpError(403, "OAuth token missing required scope: skills:write")
 
-    skill = _get_skill(request, slug)
+    skill = _get_skill(request, slug, system_kind=system_kind)
     check_skill_write(request, skill)
 
     if oauth_token is not None:
@@ -1377,8 +1406,14 @@ def create_version(request, slug: str, payload: CreateVersionIn):
     response=VersionListOut,
     auth=api_or_session,
 )
-def list_versions(request, slug: str, limit: int = 50, offset: int = 0):
-    skill = _get_skill(request, slug)
+def list_versions(
+    request,
+    slug: str,
+    limit: int = 50,
+    offset: int = 0,
+    system_kind: str | None = "",
+):
+    skill = _get_skill(request, slug, system_kind=system_kind)
     limit = min(max(limit, 1), 200)
     offset = max(offset, 0)
     qs = (
@@ -1397,8 +1432,8 @@ def list_versions(request, slug: str, limit: int = 50, offset: int = 0):
     auth=api_or_session,
     throttle=[ReadThrottle()],
 )
-def get_version(request, slug: str, version_number: int):
-    skill = _get_skill(request, slug)
+def get_version(request, slug: str, version_number: int, system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
     try:
         version = SkillVersion.objects.select_related("authored_by", "reverted_from").get(
             skill=skill, version_number=version_number
@@ -1419,8 +1454,14 @@ class UpdateVersionIn(Schema):
     throttle=[MutationThrottle()],
 )
 @require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER, RoleChoices.MEMBER)
-def update_version(request, slug: str, version_number: int, payload: UpdateVersionIn):
-    skill = _get_skill(request, slug)
+def update_version(
+    request,
+    slug: str,
+    version_number: int,
+    payload: UpdateVersionIn,
+    system_kind: str | None = "",
+):
+    skill = _get_skill(request, slug, system_kind=system_kind)
     check_skill_write(request, skill)
     try:
         version = SkillVersion.objects.select_related("authored_by").get(
@@ -1441,10 +1482,16 @@ def update_version(request, slug: str, version_number: int, payload: UpdateVersi
     throttle=[CreateAuthThrottle()],
 )
 @require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER, RoleChoices.MEMBER)
-def revert_version(request, slug: str, target_version_number: int, payload: RevertVersionIn):
+def revert_version(
+    request,
+    slug: str,
+    target_version_number: int,
+    payload: RevertVersionIn,
+    system_kind: str | None = "",
+):
     from django.db import transaction
 
-    skill = _get_skill(request, slug)
+    skill = _get_skill(request, slug, system_kind=system_kind)
     check_skill_write(request, skill)
 
     try:
@@ -1526,8 +1573,8 @@ def revert_version(request, slug: str, target_version_number: int, payload: Reve
     auth=api_or_session,
     throttle=[ReadThrottle()],
 )
-def list_version_files(request, slug: str, version_number: int):
-    skill = _get_skill(request, slug)
+def list_version_files(request, slug: str, version_number: int, system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
     try:
         SkillVersion.objects.get(skill=skill, version_number=version_number)
     except SkillVersion.DoesNotExist:
@@ -1541,8 +1588,14 @@ def list_version_files(request, slug: str, version_number: int):
     auth=api_or_session,
     throttle=[ReadThrottle()],
 )
-def get_version_file(request, slug: str, version_number: int, path: str):
-    skill = _get_skill(request, slug)
+def get_version_file(
+    request,
+    slug: str,
+    version_number: int,
+    path: str,
+    system_kind: str | None = "",
+):
+    skill = _get_skill(request, slug, system_kind=system_kind)
     try:
         SkillVersion.objects.get(skill=skill, version_number=version_number)
     except SkillVersion.DoesNotExist:
@@ -1560,8 +1613,8 @@ def get_version_file(request, slug: str, version_number: int, path: str):
     auth=api_or_session,
     throttle=[ReadThrottle()],
 )
-def get_version_file_diff(request, slug: str, version_number: int):
-    skill = _get_skill(request, slug)
+def get_version_file_diff(request, slug: str, version_number: int, system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
     try:
         SkillVersion.objects.get(skill=skill, version_number=version_number)
     except SkillVersion.DoesNotExist:
@@ -1591,8 +1644,8 @@ def get_version_file_diff(request, slug: str, version_number: int):
     auth=api_or_session,
     throttle=[ReadThrottle()],
 )
-def get_version_diff(request, slug: str, version_number: int):
-    skill = _get_skill(request, slug)
+def get_version_diff(request, slug: str, version_number: int, system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
     try:
         new_version = SkillVersion.objects.select_related("authored_by").get(
             skill=skill, version_number=version_number
@@ -1684,8 +1737,8 @@ def _parse_range(range_str: str):
     throttle=[MutationThrottle()],
 )
 @require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER, RoleChoices.MEMBER)
-def publish_skill(request, slug: str):
-    skill = _get_skill(request, slug)
+def publish_skill(request, slug: str, system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
     check_skill_write(request, skill)
     latest = SkillVersion.objects.filter(skill=skill).order_by("-version_number").first()
     if not latest:
@@ -1727,8 +1780,8 @@ def publish_skill(request, slug: str):
     throttle=[MutationThrottle()],
 )
 @require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER, RoleChoices.MEMBER)
-def review_skill(request, slug: str):
-    skill = _get_skill(request, slug)
+def review_skill(request, slug: str, system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
     check_skill_write(request, skill)
     skill.last_reviewed_at = timezone.now()
     skill.save(update_fields=["last_reviewed_at", "updated_at"])
@@ -1784,10 +1837,15 @@ def _parse_skill_md(text):
 
 
 @router.get("/skills/{slug}/export", auth=api_or_session, throttle=[ReadThrottle()])
-def export_skill(request, slug: str):
+def export_skill(request, slug: str, system_kind: str | None = ""):
     is_api_key = hasattr(request, "api_key")
     is_oauth = hasattr(request, "oauth_token")
-    skill = _get_skill(request, slug, allow_draft=not (is_api_key or is_oauth))
+    skill = _get_skill(
+        request,
+        slug,
+        allow_draft=not (is_api_key or is_oauth),
+        system_kind=system_kind,
+    )
     if is_api_key:
         allowed = apply_api_key_scope(request.api_key, Skill.objects.filter(pk=skill.pk))
         if not allowed.exists():
@@ -1875,8 +1933,8 @@ class ImportSkillOut(Schema):
     throttle=[ImportThrottle()],
 )
 @require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER, RoleChoices.MEMBER)
-def import_skill(request, slug: str, file: UploadedFile = File(...)):
-    skill = _get_skill(request, slug)
+def import_skill(request, slug: str, file: UploadedFile = File(...), system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
     check_skill_write(request, skill)
 
     if file.size and file.size > MAX_SKILL_IMPORT_BYTES:
