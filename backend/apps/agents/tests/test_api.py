@@ -28,6 +28,51 @@ class TestAgentsApi:
         assert "token" not in listed
         assert listed["masked_token"] == f"{data['token_prefix']}..."
 
+    def test_create_agent_skill_creates_hidden_draft_with_selected_deployment(
+        self,
+        auth_client,
+        admin_membership,
+    ):
+        agent_resp = auth_client.post(
+            "/api/v1/agents",
+            data={"name": "Runtime agent"},
+            content_type="application/json",
+        )
+        agent_id = agent_resp.json()["id"]
+
+        create_resp = auth_client.post(
+            "/api/v1/agents/skills",
+            data={
+                "title": "Draft Agent Skill",
+                "slug": "draft-agent-skill",
+                "description": "Created from the agents tab.",
+                "deploy_to_all": False,
+                "agent_ids": [agent_id],
+            },
+            content_type="application/json",
+        )
+        assert create_resp.status_code == 201
+        assert create_resp.json()["slug"] == "draft-agent-skill"
+        assert create_resp.json()["deploy_to_all"] is False
+        assert create_resp.json()["agent_ids"] == [agent_id]
+
+        hidden_team = Team.objects.get(
+            workspace=admin_membership.workspace,
+            system_kind=SYSTEM_KIND_AGENTS,
+        )
+        hidden_department = Department.objects.get(team=hidden_team, system_kind=SYSTEM_KIND_AGENTS)
+        skill = hidden_department.skills.get(slug="draft-agent-skill")
+        assert skill.status == "draft"
+        assert skill.current_version is None
+
+        people_resp = auth_client.get("/api/v1/skills")
+        assert people_resp.status_code == 200
+        assert people_resp.json()["count"] == 0
+
+        detail_resp = auth_client.get("/api/v1/skills/draft-agent-skill?system_kind=agents")
+        assert detail_resp.status_code == 200
+        assert detail_resp.json()["slug"] == "draft-agent-skill"
+
     def test_imported_agent_skill_is_hidden_from_people_and_available_to_agent(
         self,
         auth_client,

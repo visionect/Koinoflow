@@ -79,6 +79,14 @@ class ImportAgentSkillIn(Schema):
     agent_ids: list[str] = []
 
 
+class CreateAgentSkillIn(Schema):
+    title: str
+    slug: str = Field(pattern=r"^[a-z0-9][a-z0-9-]*$", min_length=2, max_length=100)
+    description: str = ""
+    deploy_to_all: bool = True
+    agent_ids: list[str] = []
+
+
 class UpdateAgentSkillDeploymentIn(Schema):
     deploy_to_all: bool = True
     agent_ids: list[str] = []
@@ -312,6 +320,54 @@ def list_agent_skills(request, limit: int = 50, offset: int = 0):
         "items": [_agent_skill_out(skill) for skill in qs[offset : offset + limit]],
         "count": count,
     }
+
+
+@router.post(
+    "/agents/skills",
+    response={201: AgentSkillOut},
+    auth=api_or_session,
+    throttle=[CreateAuthThrottle()],
+)
+@require_role(RoleChoices.ADMIN)
+def create_agent_skill(request, payload: CreateAgentSkillIn):
+    _require_workspace(request.workspace)
+    if not payload.deploy_to_all and not payload.agent_ids:
+        raise HttpError(400, "Select at least one agent or deploy to all agents.")
+
+    agents = []
+    if payload.agent_ids:
+        agents = list(
+            Agent.objects.filter(
+                id__in=payload.agent_ids,
+                workspace=request.workspace,
+                is_active=True,
+            )
+        )
+        if len(agents) != len(set(payload.agent_ids)):
+            raise HttpError(400, "One or more agent IDs are invalid")
+
+    department = _ensure_agents_department(request.workspace)
+    with transaction.atomic():
+        if Skill.objects.filter(department=department, slug=payload.slug).exists():
+            raise HttpError(409, "Agent skill slug already exists")
+        skill = Skill.objects.create(
+            department=department,
+            title=payload.title,
+            slug=payload.slug,
+            description=payload.description,
+            status=StatusChoices.DRAFT,
+            visibility=VisibilityChoices.DEPARTMENT,
+        )
+
+        if payload.deploy_to_all:
+            AgentSkillDeployment.objects.create(skill=skill, deploy_to_all=True)
+        else:
+            AgentSkillDeployment.objects.bulk_create(
+                [AgentSkillDeployment(skill=skill, agent=agent) for agent in agents]
+            )
+
+    skill = Skill.objects.prefetch_related("agent_deployments").get(id=skill.id)
+    return Status(201, _agent_skill_out(skill))
 
 
 @router.post(

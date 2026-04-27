@@ -1,7 +1,9 @@
 import * as React from "react"
 
 import {
+  ChevronDownIcon,
   CopyIcon,
+  FilePlusIcon,
   HistoryIcon,
   KeyRoundIcon,
   PencilIcon,
@@ -9,7 +11,7 @@ import {
   RotateCwIcon,
   UploadIcon,
 } from "lucide-react"
-import { Link, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 
 import {
@@ -18,6 +20,7 @@ import {
   useAgentUsage,
   useAgents,
   useCreateAgent,
+  useCreateAgentSkill,
   useImportAgentSkill,
   useRotateAgentToken,
   useUpdateAgent,
@@ -41,6 +44,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -149,6 +158,160 @@ function CreateAgentDialog({
             disabled={!name.trim() || createAgent.isPending}
           >
             Create agent
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function CreateAgentSkillDialog({
+  open,
+  onOpenChange,
+  agents,
+  workspaceSlug,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  agents: Agent[]
+  workspaceSlug: string | undefined
+}) {
+  const navigate = useNavigate()
+  const createAgentSkill = useCreateAgentSkill()
+  const [deployToAll, setDeployToAll] = React.useState(true)
+  const [selectedAgentIds, setSelectedAgentIds] = React.useState<Set<string>>(new Set())
+  const [title, setTitle] = React.useState("")
+  const [slug, setSlug] = React.useState("")
+  const [description, setDescription] = React.useState("")
+
+  React.useEffect(() => {
+    if (open) {
+      setTitle("")
+      setSlug("")
+      setDescription("")
+      setDeployToAll(true)
+      setSelectedAgentIds(new Set())
+    }
+  }, [open])
+
+  async function handleCreate() {
+    try {
+      const skill = await createAgentSkill.mutateAsync({
+        title,
+        slug,
+        description,
+        deploy_to_all: deployToAll,
+        agent_ids: deployToAll ? [] : [...selectedAgentIds],
+      })
+      onOpenChange(false)
+      toast.success("Agent skill created")
+      navigate(buildWorkspacePath(workspaceSlug, `/agents/skills/${skill.slug}`))
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create agent skill")
+    }
+  }
+
+  function toggleAgent(id: string, checked: boolean) {
+    setSelectedAgentIds((current) => {
+      const next = new Set(current)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  const disabled =
+    !title.trim() ||
+    !slug.trim() ||
+    (!deployToAll && selectedAgentIds.size === 0) ||
+    createAgentSkill.isPending
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Create agent skill</DialogTitle>
+          <DialogDescription>
+            Create an empty draft in hidden agent storage, then continue in the editor.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="new-agent-skill-title">Title</Label>
+              <Input
+                id="new-agent-skill-title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="new-agent-skill-slug">Slug</Label>
+              <Input
+                id="new-agent-skill-slug"
+                value={slug}
+                onChange={(e) => setSlug(slugify(e.target.value))}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="new-agent-skill-description">Description</Label>
+            <Textarea
+              id="new-agent-skill-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Short summary shown in the agent skills list"
+            />
+          </div>
+
+          <div className="rounded-lg border p-3">
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id="create-deploy-all"
+                checked={deployToAll}
+                onCheckedChange={(checked) => setDeployToAll(Boolean(checked))}
+              />
+              <div>
+                <Label htmlFor="create-deploy-all">Deploy to all agents</Label>
+                <p className="text-sm text-muted-foreground">
+                  New and existing agents will be able to retrieve this skill.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {!deployToAll && (
+            <div className="space-y-2">
+              <Label>Select agents</Label>
+              <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border p-3">
+                {agents.map((agent) => (
+                  <label
+                    key={agent.id}
+                    className="flex items-start gap-3 rounded-md p-2 hover:bg-muted/50"
+                  >
+                    <Checkbox
+                      checked={selectedAgentIds.has(agent.id)}
+                      onCheckedChange={(checked) => toggleAgent(agent.id, Boolean(checked))}
+                    />
+                    <span>
+                      <span className="block text-sm font-medium">{agent.name}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        {agent.masked_token}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => void handleCreate()} disabled={disabled}>
+            Create and edit
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -314,7 +477,8 @@ export function AgentsPage() {
   const updateAgent = useUpdateAgent()
   const rotateToken = useRotateAgentToken()
 
-  const [createOpen, setCreateOpen] = React.useState(false)
+  const [createAgentOpen, setCreateAgentOpen] = React.useState(false)
+  const [createSkillOpen, setCreateSkillOpen] = React.useState(false)
   const [createdAgent, setCreatedAgent] = React.useState<CreatedAgent | null>(null)
   const [importOpen, setImportOpen] = React.useState(false)
   const [importData, setImportData] = React.useState<SkillImportData | null>(null)
@@ -359,11 +523,26 @@ export function AgentsPage() {
         description="Manage AI agents, their one-time connection tokens, agent-specific skills, and usage."
         action={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={openFilePicker}>
-              <UploadIcon aria-hidden />
-              Import agent skill
-            </Button>
-            <Button onClick={() => setCreateOpen(true)}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">
+                  <PlusIcon aria-hidden />
+                  New skill
+                  <ChevronDownIcon className="ml-1 size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setCreateSkillOpen(true)}>
+                  <FilePlusIcon className="mr-2 size-4" />
+                  Create from scratch
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={openFilePicker}>
+                  <UploadIcon className="mr-2 size-4" />
+                  Import .skill file
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button onClick={() => setCreateAgentOpen(true)}>
               <PlusIcon aria-hidden />
               Create agent
             </Button>
@@ -466,7 +645,7 @@ export function AgentsPage() {
               title="No agents yet"
               description="Create an agent to generate its one-time connection token."
               action={
-                <Button onClick={() => setCreateOpen(true)}>
+                <Button onClick={() => setCreateAgentOpen(true)}>
                   <KeyRoundIcon aria-hidden />
                   Create agent
                 </Button>
@@ -480,7 +659,7 @@ export function AgentsPage() {
         <CardHeader>
           <CardTitle>Agent skills</CardTitle>
           <CardDescription>
-            Skills imported from this tab are excluded from normal teams and analytics.
+            Skills created or imported from this tab are excluded from normal teams and analytics.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -540,7 +719,28 @@ export function AgentsPage() {
           ) : (
             <EmptyState
               title="No agent skills"
-              description="Import a .skill file and choose which agents receive it."
+              description="Create from scratch or import a .skill file, then choose which agents receive it."
+              action={
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button>
+                      <PlusIcon aria-hidden />
+                      New skill
+                      <ChevronDownIcon className="ml-1 size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center">
+                    <DropdownMenuItem onClick={() => setCreateSkillOpen(true)}>
+                      <FilePlusIcon className="mr-2 size-4" />
+                      Create from scratch
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={openFilePicker}>
+                      <UploadIcon className="mr-2 size-4" />
+                      Import .skill file
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              }
             />
           )}
         </CardContent>
@@ -587,9 +787,15 @@ export function AgentsPage() {
       </Card>
 
       <CreateAgentDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
+        open={createAgentOpen}
+        onOpenChange={setCreateAgentOpen}
         onCreated={setCreatedAgent}
+      />
+      <CreateAgentSkillDialog
+        open={createSkillOpen}
+        onOpenChange={setCreateSkillOpen}
+        agents={agentsQuery.data ?? []}
+        workspaceSlug={workspace}
       />
       <ImportAgentSkillDialog
         open={importOpen}
