@@ -370,6 +370,14 @@ export interface ImportAgentSkillInput {
   agent_ids: string[]
 }
 
+export interface CreateAgentSkillInput {
+  title: string
+  slug: string
+  description?: string
+  deploy_to_all: boolean
+  agent_ids: string[]
+}
+
 export interface AgentSkill {
   id: string
   title: string

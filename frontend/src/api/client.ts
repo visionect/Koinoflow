@@ -14,6 +14,7 @@ import type {
   ConnectorCredential,
   CreateApiKeyInput,
   CreateAgentInput,
+  CreateAgentSkillInput,
   CreateDepartmentInput,
   CreateSkillInput,
   CreateTeamInput,
@@ -1069,6 +1070,24 @@ export function useAgentSkills() {
     queryFn: async () => {
       const res = await apiFetch<{ items: AgentSkill[]; count: number }>("/agents/skills")
       return res.items
+    },
+  })
+}
+
+export function useCreateAgentSkill() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: CreateAgentSkillInput) =>
+      apiFetch<AgentSkill>("/agents/skills", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.skills }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.analytics(30) }),
+      ])
     },
   })
 }
