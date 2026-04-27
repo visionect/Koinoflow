@@ -19,6 +19,7 @@ from server import (  # noqa: E402
     propose_skill_update,
     read_skill,
 )
+from auth import get_authorization_server_metadata  # noqa: E402
 
 PROCESS_DETAIL = {
     "id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
@@ -127,6 +128,15 @@ PROCESS_LIST_WITH_METADATA = {
     ],
     "count": 1,
 }
+
+
+def test_authorization_server_metadata_matches_mcp_requested_scopes():
+    data = get_authorization_server_metadata()
+
+    assert data["issuer"] == "http://testserver"
+    assert data["authorization_endpoint"] == "http://testserver/oauth/authorize/"
+    assert data["registration_endpoint"] == "http://testserver/oauth/register"
+    assert data["scopes_supported"] == ["skills:read", "skills:write", "usage:write"]
 
 PROCESS_DISCOVERY = {
     "items": [

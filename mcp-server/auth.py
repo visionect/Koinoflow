@@ -39,6 +39,28 @@ def get_protected_resource_metadata() -> dict:
     }
 
 
+def get_authorization_server_metadata() -> dict:
+    """RFC 8414 Authorization Server Metadata for clients probing the MCP host."""
+    return {
+        "issuer": AUTHORIZATION_SERVER_URL,
+        "authorization_endpoint": f"{AUTHORIZATION_SERVER_URL}/oauth/authorize/",
+        "token_endpoint": f"{AUTHORIZATION_SERVER_URL}/oauth/token/",
+        "revocation_endpoint": f"{AUTHORIZATION_SERVER_URL}/oauth/revoke_token/",
+        "introspection_endpoint": f"{AUTHORIZATION_SERVER_URL}/oauth/introspect/",
+        "registration_endpoint": f"{AUTHORIZATION_SERVER_URL}/oauth/register",
+        "scopes_supported": ["skills:read", "skills:write", "usage:write"],
+        "response_types_supported": ["code"],
+        "grant_types_supported": ["authorization_code", "refresh_token"],
+        "token_endpoint_auth_methods_supported": [
+            "client_secret_post",
+            "client_secret_basic",
+            "none",
+        ],
+        "code_challenge_methods_supported": ["S256"],
+        "service_documentation": f"{AUTHORIZATION_SERVER_URL}/api/docs",
+    }
+
+
 def get_www_authenticate_header(scope: str = "") -> str:
     """Build the WWW-Authenticate header for 401 responses."""
     prm_url = f"{MCP_SERVER_URL}/.well-known/oauth-protected-resource"

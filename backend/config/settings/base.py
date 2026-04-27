@@ -305,11 +305,11 @@ OAUTH2_PROVIDER_REFRESH_TOKEN_MODEL = "oauth2_provider.RefreshToken"
 
 OAUTH2_PROVIDER = {
     "SCOPES": {
-        "processes:read": "Read processes in your workspace",
-        "processes:write": "Create and update processes in your workspace",
+        "skills:read": "Read skills in your workspace",
+        "skills:write": "Create and update skills in your workspace",
         "usage:write": "Log usage events",
     },
-    "DEFAULT_SCOPES": ["processes:read", "processes:write", "usage:write"],
+    "DEFAULT_SCOPES": ["skills:read", "skills:write", "usage:write"],
     "PKCE_REQUIRED": True,
     "ACCESS_TOKEN_EXPIRE_SECONDS": 3600,
     "REFRESH_TOKEN_EXPIRE_SECONDS": 60 * 60 * 24 * 30,

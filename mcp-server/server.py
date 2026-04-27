@@ -18,7 +18,12 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from api_client import KoinoflowAPIClient, KoinoflowAPIError
-from auth import get_protected_resource_metadata, get_www_authenticate_header, introspect_token
+from auth import (
+    get_authorization_server_metadata,
+    get_protected_resource_metadata,
+    get_www_authenticate_header,
+    introspect_token,
+)
 from config import (
     ALLOWED_HOSTS,
     ALLOWED_ORIGINS,
@@ -65,6 +70,16 @@ class _OAuthMiddleware(BaseHTTPMiddleware):
 
         if path == "/.well-known/oauth-protected-resource":
             metadata = get_protected_resource_metadata()
+            return JSONResponse(
+                metadata,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "public, max-age=3600",
+                },
+            )
+
+        if path == "/.well-known/oauth-authorization-server":
+            metadata = get_authorization_server_metadata()
             return JSONResponse(
                 metadata,
                 headers={
