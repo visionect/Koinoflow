@@ -14,6 +14,7 @@
 
 <p align="center">
   <a href="https://koinoflow.com"><img alt="Website" src="https://img.shields.io/badge/website-koinoflow.com-0ea5e9" /></a>
+  <a href="https://app.koinoflow.com"><img alt="Hosted app" src="https://img.shields.io/badge/try-app.koinoflow.com-7c3aed" /></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-green.svg" /></a>
   <a href="https://github.com/visionect/Koinoflow/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/visionect/Koinoflow/actions/workflows/ci.yml/badge.svg" /></a>
   <a href="https://github.com/visionect/Koinoflow/pkgs/container/koinoflow%2Fbackend"><img alt="GHCR" src="https://img.shields.io/badge/ghcr.io-visionect%2Fkoinoflow-blue?logo=docker" /></a>
@@ -30,6 +31,10 @@ our refund policy?", the answer comes from the latest approved version of
 your skill, not a stale wiki page.
 
 > Status: early development. APIs, schemas, and data models may change.
+
+Try Koinoflow on our hosted deployment at
+[app.koinoflow.com](https://app.koinoflow.com). You can test the product and
+onboard your account for free for 30 days.
 
 ## Features
 
@@ -182,13 +187,16 @@ The **Koinoflow** name and logo are trademarks of Visionect d.o.o. — see
 
 You can run Koinoflow entirely on your own infrastructure using the
 instructions above — that's the default mode and it's free forever under
-MIT. If you'd rather not operate it yourself, a managed hosted service is
-available at [koinoflow.com](https://koinoflow.com).
+MIT. If you'd rather not operate it yourself, start with our managed hosted
+deployment at [app.koinoflow.com](https://app.koinoflow.com): test Koinoflow
+and onboard your account free for 30 days. After the trial, we can help set up
+Koinoflow in your infrastructure and migrate your data there, or you can keep
+using our deployment for a custom fee.
 
 ## Sponsorship
 
 Active development of Koinoflow is sponsored by
 [Visionect](https://www.visionect.com), which also operates the hosted
-service at [koinoflow.com](https://koinoflow.com). The project remains
+service at [app.koinoflow.com](https://app.koinoflow.com). The project remains
 open-source; sponsorship funds full-time engineering and community
 support.
