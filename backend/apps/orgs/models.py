@@ -550,6 +550,50 @@ class WorkspaceFeatureFlag(BaseModel):
         return f"{self.workspace.name} → {self.flag.name}"
 
 
+# ── Workspace onboarding ───────────────────────────────────────────────
+
+
+class WorkspaceOnboarding(BaseModel):
+    workspace = models.OneToOneField(
+        Workspace,
+        on_delete=models.CASCADE,
+        related_name="onboarding",
+    )
+    workspace_created_at = models.DateTimeField(null=True, blank=True)
+    team_created_at = models.DateTimeField(null=True, blank=True)
+    department_created_at = models.DateTimeField(null=True, blank=True)
+    skill_created_at = models.DateTimeField(null=True, blank=True)
+    mcp_connected_at = models.DateTimeField(null=True, blank=True)
+    skill_read_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "workspace_onboarding"
+
+
+class AdminOnboardingPreference(BaseModel):
+    workspace = models.ForeignKey(
+        Workspace,
+        on_delete=models.CASCADE,
+        related_name="onboarding_preferences",
+    )
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="onboarding_preferences",
+    )
+    dismissed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "admin_onboarding_preference"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "user"],
+                name="uq_onboarding_pref_ws_user",
+            ),
+        ]
+
+
 # ── ApiKey ──────────────────────────────────────────────────────────────
 
 

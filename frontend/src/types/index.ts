@@ -58,6 +58,26 @@ export interface MeResponse {
   billing_enabled: boolean
 }
 
+export interface OnboardingStep {
+  step: number
+  key: string
+  title: string
+  description: string
+  completed: boolean
+  cta_path: string
+}
+
+export interface OnboardingProgress {
+  steps: OnboardingStep[]
+  current_step: number
+  is_complete: boolean
+  is_dismissed: boolean
+}
+
+export interface OnboardingPreferenceInput {
+  dismissed: boolean
+}
+
 export interface Team {
   id: string
   name: string

@@ -469,4 +469,7 @@ def log_usage_event(request, payload: CreateUsageEventIn):
         client_type=client_type,
         tool_name=payload.tool_name,
     )
+    from apps.orgs.onboarding import sync_onboarding_state
+
+    sync_onboarding_state(workspace)
     return {"ok": True}

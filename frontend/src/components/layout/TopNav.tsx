@@ -1,11 +1,17 @@
 import * as React from "react"
 
-import { MoonIcon, Settings2Icon, SunIcon, UserCircle2Icon } from "lucide-react"
+import { LifeBuoyIcon, MoonIcon, Settings2Icon, SunIcon, UserCircle2Icon } from "lucide-react"
 import { Link, useLocation, useParams } from "react-router-dom"
 import { toast } from "sonner"
 import { useTheme } from "next-themes"
 
-import { apiFetch, useDepartment, useTeam } from "@/api/client"
+import {
+  apiFetch,
+  useDepartment,
+  useOnboardingProgress,
+  useTeam,
+  useUpdateOnboardingPreference,
+} from "@/api/client"
 import { useAuth } from "@/hooks/useAuth"
 import { buildWorkspacePath, getInitials, startCase } from "@/lib/format"
 import {
@@ -52,8 +58,15 @@ export function TopNav() {
   const { pathname } = useLocation()
   const params = useParams<{ workspace: string; departmentId: string; teamSlug: string }>()
   const { workspace } = params
-  const { user } = useAuth()
+  const { user, isAdmin } = useAuth()
   const { setTheme, resolvedTheme } = useTheme()
+  const onboardingQuery = useOnboardingProgress(Boolean(isAdmin))
+  const updateOnboardingPreference = useUpdateOnboardingPreference()
+  const showRestoreOnboarding =
+    Boolean(isAdmin) &&
+    Boolean(onboardingQuery.data) &&
+    onboardingQuery.data!.is_dismissed &&
+    !onboardingQuery.data!.is_complete
 
   const segments = pathname.split("/").filter(Boolean)
   const workspaceSegments = workspace && segments[0] === workspace ? segments.slice(1) : segments
@@ -147,6 +160,15 @@ export function TopNav() {
             {resolvedTheme === "dark" ? <SunIcon /> : <MoonIcon />}
             Toggle theme
           </DropdownMenuItem>
+          {showRestoreOnboarding ? (
+            <DropdownMenuItem
+              disabled={updateOnboardingPreference.isPending}
+              onClick={() => updateOnboardingPreference.mutate({ dismissed: false })}
+            >
+              <LifeBuoyIcon />
+              Show setup guide
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => void handleLogout()} variant="destructive">
             <UserCircle2Icon />
