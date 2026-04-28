@@ -38,12 +38,29 @@ export function OnboardingGuide() {
   const [expanded, setExpanded] = React.useState(false)
   const [observedIncomplete, setObservedIncomplete] = React.useState(false)
   const [hideAfterComplete, setHideAfterComplete] = React.useState(false)
+  const completedDismissedRef = React.useRef(false)
 
   const isComplete = Boolean(data?.is_complete)
   // Only celebrate when we've actually seen the transition from incomplete →
   // complete during this session. Otherwise reloading an already-onboarded
   // workspace would replay the "You're all set" card every time.
   const showCelebration = isComplete && observedIncomplete && !hideAfterComplete
+
+  const dismissCompletedGuide = React.useCallback(() => {
+    setHideAfterComplete(true)
+    if (completedDismissedRef.current || data?.is_dismissed) {
+      return
+    }
+    completedDismissedRef.current = true
+    updatePreference.mutate(
+      { dismissed: true },
+      {
+        onError: () => {
+          completedDismissedRef.current = false
+        },
+      },
+    )
+  }, [data?.is_dismissed, updatePreference])
 
   React.useEffect(() => {
     if (data && !data.is_complete) {
@@ -53,10 +70,10 @@ export function OnboardingGuide() {
 
   React.useEffect(() => {
     if (showCelebration) {
-      const t = setTimeout(() => setHideAfterComplete(true), COMPLETION_LINGER_MS)
+      const t = setTimeout(() => dismissCompletedGuide(), COMPLETION_LINGER_MS)
       return () => clearTimeout(t)
     }
-  }, [showCelebration])
+  }, [dismissCompletedGuide, showCelebration])
 
   if (!isAdmin || isLoading || isError || !data || data.is_dismissed || !workspace) {
     return null
@@ -100,7 +117,7 @@ export function OnboardingGuide() {
         aria-label="Workspace setup guide"
       >
         {isComplete ? (
-          <CompletedCard onDismiss={() => setHideAfterComplete(true)} />
+          <CompletedCard onDismiss={dismissCompletedGuide} />
         ) : currentStep ? (
           <ActiveCard
             data={data}
