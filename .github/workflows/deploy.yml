@@ -21,6 +21,8 @@ env:
   BACKEND_SERVICE: koinoflow-backend
   MCP_SERVICE: koinoflow-mcp
   MIGRATION_JOB: koinoflow-migrate
+  CLOUD_TASKS_QUEUE: koinoflow-tasks
+  CLOUD_TASKS_SERVICE_ACCOUNT: koinoflow-tasks-invoker@koinoflow-infra.iam.gserviceaccount.com
 
 jobs:
   deploy:
@@ -90,6 +92,21 @@ jobs:
             --region="${REGION}" \
             --wait
 
+      - name: Ensure Cloud Tasks queue
+        run: |
+          set -euo pipefail
+
+          if ! gcloud tasks queues describe "${CLOUD_TASKS_QUEUE}" \
+            --project="${PROJECT_ID}" \
+            --location="${REGION}" >/dev/null 2>&1; then
+            gcloud tasks queues create "${CLOUD_TASKS_QUEUE}" \
+              --project="${PROJECT_ID}" \
+              --location="${REGION}" \
+              --max-dispatches-per-second=10 \
+              --max-concurrent-dispatches=10 \
+              --max-attempts=5
+          fi
+
       - name: Deploy Cloud Run services
         run: |
           set -euo pipefail
@@ -121,10 +138,18 @@ jobs:
           backend_secrets+=",VERTEX_CLIENT_ID=VERTEX_CLIENT_ID:latest"
           backend_secrets+=",VERTEX_CLIENT_CERT_URL=VERTEX_CLIENT_CERT_URL:latest"
 
+          backend_env_vars="TASK_BACKEND=cloudtasks"
+          backend_env_vars+=",CLOUD_TASKS_PROJECT=${PROJECT_ID}"
+          backend_env_vars+=",CLOUD_TASKS_LOCATION=${REGION}"
+          backend_env_vars+=",CLOUD_TASKS_QUEUE=${CLOUD_TASKS_QUEUE}"
+          backend_env_vars+=",CLOUD_TASKS_SERVICE_URL=https://app.koinoflow.com"
+          backend_env_vars+=",CLOUD_TASKS_SERVICE_ACCOUNT=${CLOUD_TASKS_SERVICE_ACCOUNT}"
+
           gcloud run services update "${BACKEND_SERVICE}" \
             --project="${PROJECT_ID}" \
             --region="${REGION}" \
             --image="${BACKEND_IMAGE}" \
+            --update-env-vars="${backend_env_vars}" \
             --update-secrets="${backend_secrets}"
 
           gcloud run services update "${MCP_SERVICE}" \

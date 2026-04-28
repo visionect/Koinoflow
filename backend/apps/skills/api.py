@@ -1738,6 +1738,8 @@ def _parse_range(range_str: str):
 )
 @require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER, RoleChoices.MEMBER)
 def publish_skill(request, slug: str, system_kind: str | None = ""):
+    from django.db import transaction
+
     skill = _get_skill(request, slug, system_kind=system_kind)
     check_skill_write(request, skill)
     latest = SkillVersion.objects.filter(skill=skill).order_by("-version_number").first()
@@ -1759,7 +1761,7 @@ def publish_skill(request, slug: str, system_kind: str | None = ""):
     skill.status = StatusChoices.PUBLISHED
     skill.last_reviewed_at = timezone.now()
     skill.save(update_fields=["current_version", "status", "last_reviewed_at", "updated_at"])
-    queue_skill_discovery_embedding(str(latest.id), force=True)
+    transaction.on_commit(lambda: queue_skill_discovery_embedding(str(latest.id), force=True))
 
     skill = Skill.objects.select_related(
         "department__team",
