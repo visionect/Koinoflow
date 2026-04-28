@@ -34,6 +34,8 @@ import type {
   McpConnectionScopeInput,
   MeResponse,
   Member,
+  OnboardingPreferenceInput,
+  OnboardingProgress,
   PaginatedResponse,
   PendingInvitation,
   Skill,
@@ -257,6 +259,9 @@ export const queryKeys = {
   mcp: {
     connections: ["mcp", "connections"] as const,
   },
+  onboarding: {
+    progress: ["onboarding", "progress"] as const,
+  },
   usage: {
     events: (filters?: UsageEventFilters) => ["usage", "events", filters ?? {}] as const,
     summary: (days: number) => ["usage", "summary", days] as const,
@@ -279,6 +284,7 @@ function invalidateWorkspaceStructure(queryClient: ReturnType<typeof useQueryCli
     queryClient.invalidateQueries({ queryKey: queryKeys.teams.all }),
     queryClient.invalidateQueries({ queryKey: ["departments"] }),
     queryClient.invalidateQueries({ queryKey: ["skills"] }),
+    queryClient.invalidateQueries({ queryKey: queryKeys.onboarding.progress }),
   ])
 }
 
@@ -287,6 +293,58 @@ export function useMe() {
     queryKey: queryKeys.auth.me,
     queryFn: () => apiFetch<MeResponse>("/auth/me"),
     retry: false,
+  })
+}
+
+export function useOnboardingProgress(enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.onboarding.progress,
+    queryFn: () => apiFetch<OnboardingProgress>("/onboarding/progress"),
+    enabled,
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => {
+      const d = query.state.data
+      if (!d || d.is_complete) {
+        return false
+      }
+      if (d.current_step >= 5) {
+        return 30_000
+      }
+      return 60_000
+    },
+  })
+}
+
+export function useUpdateOnboardingPreference() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: OnboardingPreferenceInput) =>
+      apiFetch<{ ok: boolean }>("/onboarding/preference", {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    onMutate: async (payload) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.onboarding.progress })
+      const previous = queryClient.getQueryData<OnboardingProgress>(
+        queryKeys.onboarding.progress,
+      )
+      if (previous) {
+        queryClient.setQueryData<OnboardingProgress>(queryKeys.onboarding.progress, {
+          ...previous,
+          is_dismissed: payload.dismissed,
+        })
+      }
+      return { previous }
+    },
+    onError: (_err, _payload, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.onboarding.progress, context.previous)
+      }
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.onboarding.progress })
+    },
   })
 }
 
@@ -311,6 +369,7 @@ export function useCreateWorkspace() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.auth.me }),
         queryClient.setQueryData(queryKeys.workspaces.detail(workspace.slug), workspace),
+        queryClient.invalidateQueries({ queryKey: queryKeys.onboarding.progress }),
       ])
     },
   })
@@ -410,7 +469,10 @@ export function useCreateTeam() {
         body: JSON.stringify(payload),
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.teams.all })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.teams.all }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.onboarding.progress }),
+      ])
     },
   })
 }
@@ -492,6 +554,7 @@ export function useCreateDepartment() {
         queryClient.invalidateQueries({ queryKey: queryKeys.departments.all(payload.team_slug) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.teams.all }),
         queryClient.invalidateQueries({ queryKey: queryKeys.teams.detail(payload.team_slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.onboarding.progress }),
       ])
     },
   })
@@ -569,6 +632,7 @@ export function useCreateSkill() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["skills"] }),
         queryClient.invalidateQueries({ queryKey: ["departments"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.onboarding.progress }),
         queryClient.setQueryData(queryKeys.skills.detail(skill.slug), skill),
       ])
     },
@@ -1174,7 +1238,10 @@ export function useRevokeMcpConnection() {
         method: "DELETE",
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.mcp.connections })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.mcp.connections }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.onboarding.progress }),
+      ])
     },
   })
 }
@@ -1189,7 +1256,10 @@ export function useUpdateMcpConnectionScope() {
         body: JSON.stringify(payload),
       }),
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.mcp.connections })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.mcp.connections }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.onboarding.progress }),
+      ])
     },
   })
 }

@@ -9,7 +9,9 @@ import {
   useCreateStalenessAlertRule,
   useDepartments,
   useEffectiveSettings,
+  useOnboardingProgress,
   useTeams,
+  useUpdateOnboardingPreference,
   useUpdateStalenessAlertRule,
   useUpsertSettings,
   useWorkspace,
@@ -85,6 +87,8 @@ export function SettingsPage() {
 
   const settingsQuery = useEffectiveSettings(scopeTeamId, scopeDeptId)
   const auditRulesQuery = useAuditRules()
+  const onboardingQuery = useOnboardingProgress(Boolean(isAdmin))
+  const updateOnboardingPreference = useUpdateOnboardingPreference()
   const upsertSettings = useUpsertSettings()
   const createAuditRule = useCreateAuditRule()
   const createStalenessAlertRule = useCreateStalenessAlertRule()
@@ -260,6 +264,30 @@ export function SettingsPage() {
         title="Workspace settings"
         description="Configure policies that govern how skills are managed across the workspace."
       />
+
+      {isAdmin &&
+      onboardingQuery.data &&
+      onboardingQuery.data.is_dismissed &&
+      !onboardingQuery.data.is_complete ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Onboarding guide</CardTitle>
+            <CardDescription>
+              You dismissed the setup guide. Show it again to continue the recommended setup steps.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              disabled={updateOnboardingPreference.isPending}
+              onClick={() => updateOnboardingPreference.mutate({ dismissed: false })}
+              type="button"
+              variant="outline"
+            >
+              Show onboarding guide
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {isAdmin && hasTeams ? (
         <Card>

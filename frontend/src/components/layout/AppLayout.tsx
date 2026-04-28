@@ -5,6 +5,7 @@ import { LoadingScreen } from "@/components/shared/LoadingScreen"
 import { AppSidebar } from "@/components/layout/AppSidebar"
 import { TopNav } from "@/components/layout/TopNav"
 import { TrialBanner } from "@/components/layout/TrialBanner"
+import { OnboardingGuide } from "@/components/onboarding/OnboardingGuide"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 
 export function AppLayout() {
@@ -41,6 +42,7 @@ export function AppLayout() {
         <main className="min-w-0 flex-1 overflow-hidden px-4 py-6 md:px-6">
           <Outlet />
         </main>
+        <OnboardingGuide />
       </SidebarInset>
     </SidebarProvider>
   )

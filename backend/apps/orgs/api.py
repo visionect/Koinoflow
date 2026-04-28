@@ -20,6 +20,7 @@ from apps.orgs.enums import EntityType, InvitationStatus, RoleChoices
 from apps.orgs.models import (
     SETTINGS_FIELDS,
     SYSTEM_KIND_AGENTS,
+    AdminOnboardingPreference,
     CoreSettings,
     CoreSlug,
     Department,
@@ -29,6 +30,7 @@ from apps.orgs.models import (
     StalenessAlertRule,
     Team,
     Workspace,
+    WorkspaceOnboarding,
     create_slug,
     get_effective_settings,
     resolve_slug,
@@ -225,6 +227,30 @@ class MemberListOut(Schema):
 class InvitationListOut(Schema):
     items: list[InvitationOut]
     count: int
+
+
+class OnboardingStepOut(Schema):
+    step: int
+    key: str
+    title: str
+    description: str
+    completed: bool
+    cta_path: str
+
+
+class OnboardingProgressOut(Schema):
+    steps: list[OnboardingStepOut]
+    current_step: int
+    is_complete: bool
+    is_dismissed: bool
+
+
+class OnboardingPreferenceIn(Schema):
+    dismissed: bool
+
+
+class OkOut(Schema):
+    ok: bool
 
 
 class AuditRuleOut(Schema):
@@ -513,6 +539,11 @@ def create_workspace(request, payload: CreateWorkspaceIn):
                 subscription=subscription,
             )
 
+        WorkspaceOnboarding.objects.create(
+            workspace=workspace,
+            workspace_created_at=timezone.now(),
+        )
+
     return Status(201, _workspace_out(workspace))
 
 
@@ -530,6 +561,48 @@ def get_workspace(request, slug: str):
     if ws_slug != slug:
         raise HttpError(404, "Workspace not found")
     return _workspace_out(workspace)
+
+
+# ── Onboarding ─────────────────────────────────────────────────────────
+
+
+@router.get(
+    "/onboarding/progress",
+    response=OnboardingProgressOut,
+    auth=api_or_session,
+    throttle=[ReadThrottle()],
+)
+@require_role(RoleChoices.ADMIN)
+def get_onboarding_progress(request):
+    """Return workspace onboarding steps and per-admin dismissal state."""
+    workspace = request.workspace
+    if not workspace:
+        raise HttpError(403, "No workspace context")
+    from apps.orgs.onboarding import build_onboarding_progress, sync_onboarding_state
+
+    ob = sync_onboarding_state(workspace)
+    return build_onboarding_progress(ob, request.user)
+
+
+@router.patch(
+    "/onboarding/preference",
+    response=OkOut,
+    auth=api_or_session,
+    throttle=[MutationThrottle()],
+)
+@require_role(RoleChoices.ADMIN)
+def update_onboarding_preference(request, payload: OnboardingPreferenceIn):
+    """Dismiss or restore the onboarding guide for the current admin only."""
+    workspace = request.workspace
+    if not workspace:
+        raise HttpError(403, "No workspace context")
+    pref, _ = AdminOnboardingPreference.objects.get_or_create(
+        workspace=workspace,
+        user=request.user,
+    )
+    pref.dismissed_at = timezone.now() if payload.dismissed else None
+    pref.save(update_fields=["dismissed_at", "updated_at"])
+    return {"ok": True}
 
 
 # ── Member Endpoints ─────────────────────────────────────────────────────
@@ -858,6 +931,9 @@ def create_team(request, payload: CreateTeamIn):
     slug = unique_slug(EntityType.TEAM, payload.slug, scope_workspace=workspace)
     team = Team.objects.create(workspace=workspace, name=payload.name)
     create_slug(EntityType.TEAM, team.id, slug, scope_workspace=workspace)
+    from apps.orgs.onboarding import sync_onboarding_state
+
+    sync_onboarding_state(workspace)
     return Status(201, _team_out(team))
 
 
@@ -995,6 +1071,9 @@ def create_department(request, payload: CreateDepartmentIn):
         .annotate(**_department_process_count_annotations())
         .first()
     )
+    from apps.orgs.onboarding import sync_onboarding_state
+
+    sync_onboarding_state(workspace)
     return Status(201, _department_out(dept))
 
 
