@@ -9,6 +9,7 @@ import {
   XIcon,
 } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
+import { toast } from "sonner"
 
 import {
   useOnboardingProgress,
@@ -35,27 +36,32 @@ export function OnboardingGuide() {
   const updatePreference = useUpdateOnboardingPreference()
   const teamsQuery = useTeams()
   const [expanded, setExpanded] = React.useState(false)
-  const [completionShown, setCompletionShown] = React.useState(false)
+  const [observedIncomplete, setObservedIncomplete] = React.useState(false)
   const [hideAfterComplete, setHideAfterComplete] = React.useState(false)
 
   const isComplete = Boolean(data?.is_complete)
+  // Only celebrate when we've actually seen the transition from incomplete →
+  // complete during this session. Otherwise reloading an already-onboarded
+  // workspace would replay the "You're all set" card every time.
+  const showCelebration = isComplete && observedIncomplete && !hideAfterComplete
 
   React.useEffect(() => {
-    if (isComplete && !completionShown) {
-      setCompletionShown(true)
+    if (data && !data.is_complete) {
+      setObservedIncomplete(true)
+    }
+  }, [data])
+
+  React.useEffect(() => {
+    if (showCelebration) {
       const t = setTimeout(() => setHideAfterComplete(true), COMPLETION_LINGER_MS)
       return () => clearTimeout(t)
     }
-    if (!isComplete && completionShown) {
-      setCompletionShown(false)
-      setHideAfterComplete(false)
-    }
-  }, [isComplete, completionShown])
+  }, [showCelebration])
 
   if (!isAdmin || isLoading || isError || !data || data.is_dismissed || !workspace) {
     return null
   }
-  if (isComplete && hideAfterComplete) {
+  if (isComplete && !showCelebration) {
     return null
   }
 
@@ -80,6 +86,10 @@ export function OnboardingGuide() {
   const currentStep = data.steps.find((s) => s.step === data.current_step) ?? null
   const handleDismiss = () => {
     updatePreference.mutate({ dismissed: true })
+    toast("Setup guide hidden", {
+      description: "Restore it anytime from the user menu in the top right.",
+      duration: 5000,
+    })
   }
 
   return (

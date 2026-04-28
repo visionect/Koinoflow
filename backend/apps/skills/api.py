@@ -1179,9 +1179,6 @@ def create_skill(request, payload: CreateSkillIn):
         "current_version__authored_by",
         "current_version__reverted_from",
     ).get(id=skill.id)
-    from apps.orgs.onboarding import sync_onboarding_state
-
-    sync_onboarding_state(workspace)
     return Status(201, _skill_detail_out(skill))
 
 
@@ -1770,6 +1767,9 @@ def publish_skill(request, slug: str, system_kind: str | None = ""):
         "current_version__authored_by",
         "current_version__reverted_from",
     ).get(id=skill.id)
+    from apps.orgs.onboarding import sync_onboarding_state
+
+    sync_onboarding_state(dept.team.workspace)
     return _skill_detail_out(skill)
 
 

@@ -13,6 +13,7 @@ from apps.orgs.models import (
     Workspace,
     WorkspaceOnboarding,
 )
+from apps.skills.enums import StatusChoices
 from apps.skills.models import Skill
 from apps.usage.models import UsageEvent
 
@@ -42,8 +43,8 @@ ONBOARDING_STEPS: list[tuple[int, str, str, str, str]] = [
     (
         4,
         "skill",
-        "Create a skill",
-        "Skills turn your operational knowledge into something humans and AI clients can reuse.",
+        "Publish a skill",
+        "Draft and publish a skill so humans and AI clients can read it.",
         "/skills",
     ),
     (
@@ -99,6 +100,7 @@ def sync_onboarding_state(workspace: Workspace) -> WorkspaceOnboarding:
         has_skill = Skill.objects.filter(
             department__team__workspace=workspace,
             department__system_kind="",
+            status=StatusChoices.PUBLISHED,
         ).exists()
         if has_skill:
             ob.skill_created_at = now
