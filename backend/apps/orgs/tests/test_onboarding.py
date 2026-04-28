@@ -21,9 +21,7 @@ from apps.usage.models import UsageEvent
 
 
 def _ws_slug(workspace):
-    return CoreSlug.objects.get(
-        entity_type=EntityType.WORKSPACE, entity_id=workspace.id
-    ).slug
+    return CoreSlug.objects.get(entity_type=EntityType.WORKSPACE, entity_id=workspace.id).slug
 
 
 def _create_oauth_app(name="Test MCP Client"):
