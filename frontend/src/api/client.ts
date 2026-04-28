@@ -366,10 +366,13 @@ export function useCreateWorkspace() {
         body: JSON.stringify(payload),
       }),
     onSuccess: async (workspace) => {
+      queryClient.setQueryData(queryKeys.workspaces.detail(workspace.slug), workspace)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.auth.me }),
-        queryClient.setQueryData(queryKeys.workspaces.detail(workspace.slug), workspace),
-        queryClient.invalidateQueries({ queryKey: queryKeys.onboarding.progress }),
+        queryClient.prefetchQuery({
+          queryKey: queryKeys.onboarding.progress,
+          queryFn: () => apiFetch<OnboardingProgress>("/onboarding/progress"),
+        }),
       ])
     },
   })
@@ -632,7 +635,6 @@ export function useCreateSkill() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["skills"] }),
         queryClient.invalidateQueries({ queryKey: ["departments"] }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.onboarding.progress }),
         queryClient.setQueryData(queryKeys.skills.detail(skill.slug), skill),
       ])
     },
@@ -875,6 +877,7 @@ export function usePublishSkill(slug: string, systemKind?: SkillSystemKind) {
         queryClient.invalidateQueries({ queryKey: ["skills"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug, systemKind) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.skills.versions(slug, systemKind) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.onboarding.progress }),
       ])
     },
   })
