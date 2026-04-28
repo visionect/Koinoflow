@@ -16,6 +16,7 @@ from apps.orgs.tests.factories import (
     TeamFactory,
     WorkspaceFactory,
 )
+from apps.skills.enums import StatusChoices
 from apps.skills.tests.factories import SkillFactory
 from apps.usage.models import UsageEvent
 
@@ -125,7 +126,11 @@ class TestOnboardingProgress:
         slug = _ws_slug(ws)
         team = TeamFactory(workspace=ws, slug="skill-team")
         dept = DepartmentFactory(team=team, slug="skill-dept")
-        SkillFactory(department=dept, slug="runbook-one")
+        SkillFactory(
+            department=dept,
+            slug="runbook-one",
+            status=StatusChoices.PUBLISHED,
+        )
 
         resp = auth_client.get(
             "/api/v1/onboarding/progress",
@@ -141,7 +146,11 @@ class TestOnboardingProgress:
         slug = _ws_slug(ws)
         team = TeamFactory(workspace=ws, slug="mcp-team")
         dept = DepartmentFactory(team=team, slug="mcp-dept")
-        SkillFactory(department=dept, slug="mcp-skill")
+        SkillFactory(
+            department=dept,
+            slug="mcp-skill",
+            status=StatusChoices.PUBLISHED,
+        )
 
         app = _create_oauth_app()
         _create_access_token(app, admin_membership.user)
@@ -160,7 +169,11 @@ class TestOnboardingProgress:
         slug = _ws_slug(ws)
         team = TeamFactory(workspace=ws, slug="usage-team")
         dept = DepartmentFactory(team=team, slug="usage-dept")
-        skill = SkillFactory(department=dept, slug="usage-skill")
+        skill = SkillFactory(
+            department=dept,
+            slug="usage-skill",
+            status=StatusChoices.PUBLISHED,
+        )
 
         app = _create_oauth_app()
         _create_access_token(app, admin_membership.user)
