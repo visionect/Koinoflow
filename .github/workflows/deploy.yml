@@ -94,20 +94,38 @@ jobs:
         run: |
           set -euo pipefail
 
-          vertex_secrets="VERTEX_PROJECT_ID=VERTEX_PROJECT_ID:latest"
-          vertex_secrets+=",VERTEX_LOCATION=VERTEX_LOCATION:latest"
-          vertex_secrets+=",VERTEX_CLIENT_PROJECT_ID=VERTEX_CLIENT_PROJECT_ID:latest"
-          vertex_secrets+=",VERTEX_CLIENT_PRIVATE_KEY_ID=VERTEX_CLIENT_PRIVATE_KEY_ID:latest"
-          vertex_secrets+=",VERTEX_CLIENT_PRIVATE_KEY=VERTEX_CLIENT_PRIVATE_KEY:latest"
-          vertex_secrets+=",VERTEX_CLIENT_EMAIL=VERTEX_CLIENT_EMAIL:latest"
-          vertex_secrets+=",VERTEX_CLIENT_ID=VERTEX_CLIENT_ID:latest"
-          vertex_secrets+=",VERTEX_CLIENT_CERT_URL=VERTEX_CLIENT_CERT_URL:latest"
+          backend_secrets="SECRET_KEY=DJANGO_SECRET_KEY:latest"
+          backend_secrets+=",DATABASE_URL=DATABASE_URL:latest"
+          backend_secrets+=",REDIS_URL=REDIS_URL:latest"
+          backend_secrets+=",GOOGLE_CLIENT_ID=GOOGLE_CLIENT_ID:latest"
+          backend_secrets+=",GOOGLE_CLIENT_SECRET=GOOGLE_CLIENT_SECRET:latest"
+          backend_secrets+=",GITHUB_CLIENT_ID=GITHUB_CLIENT_ID:latest"
+          backend_secrets+=",GITHUB_CLIENT_SECRET=GITHUB_CLIENT_SECRET:latest"
+          backend_secrets+=",ATLASSIAN_CLIENT_ID=ATLASSIAN_CLIENT_ID:latest"
+          backend_secrets+=",ATLASSIAN_CLIENT_SECRET=ATLASSIAN_CLIENT_SECRET:latest"
+          backend_secrets+=",ATLASSIAN_WEBHOOK_SECRET=ATLASSIAN_WEBHOOK_SECRET:latest"
+          backend_secrets+=",CONNECTOR_ENCRYPTION_KEY=CONNECTOR_ENCRYPTION_KEY:latest"
+          backend_secrets+=",RESEND_API_KEY=RESEND_API_KEY:latest"
+          backend_secrets+=",INTERNAL_TASK_TOKEN=INTERNAL_TASK_TOKEN:latest"
+          backend_secrets+=",MCP_INTROSPECT_CLIENT_ID=MCP_INTROSPECT_CLIENT_ID:latest"
+          backend_secrets+=",MCP_INTROSPECT_CLIENT_SECRET=MCP_INTROSPECT_CLIENT_SECRET:latest"
+          backend_secrets+=",CAPTURE_SCORING_MODEL=CAPTURE_SCORING_MODEL:latest"
+          backend_secrets+=",CAPTURE_EXTRACTION_MODEL=CAPTURE_EXTRACTION_MODEL:latest"
+          backend_secrets+=",PROCESS_GENERATION_MODEL=PROCESS_GENERATION_MODEL:latest"
+          backend_secrets+=",VERTEX_PROJECT_ID=VERTEX_PROJECT_ID:latest"
+          backend_secrets+=",VERTEX_LOCATION=VERTEX_LOCATION:latest"
+          backend_secrets+=",VERTEX_CLIENT_PROJECT_ID=VERTEX_CLIENT_PROJECT_ID:latest"
+          backend_secrets+=",VERTEX_CLIENT_PRIVATE_KEY_ID=VERTEX_CLIENT_PRIVATE_KEY_ID:latest"
+          backend_secrets+=",VERTEX_CLIENT_PRIVATE_KEY=VERTEX_CLIENT_PRIVATE_KEY:latest"
+          backend_secrets+=",VERTEX_CLIENT_EMAIL=VERTEX_CLIENT_EMAIL:latest"
+          backend_secrets+=",VERTEX_CLIENT_ID=VERTEX_CLIENT_ID:latest"
+          backend_secrets+=",VERTEX_CLIENT_CERT_URL=VERTEX_CLIENT_CERT_URL:latest"
 
           gcloud run services update "${BACKEND_SERVICE}" \
             --project="${PROJECT_ID}" \
             --region="${REGION}" \
             --image="${BACKEND_IMAGE}" \
-            --set-secrets="${vertex_secrets}"
+            --update-secrets="${backend_secrets}"
 
           gcloud run services update "${MCP_SERVICE}" \
             --project="${PROJECT_ID}" \
