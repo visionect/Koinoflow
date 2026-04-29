@@ -319,6 +319,9 @@ class CoreSettings(BaseModel):
     enable_api_access = models.BooleanField(null=True, default=None)
     require_change_summary = models.BooleanField(null=True, default=None)
     allow_agent_skill_updates = models.BooleanField(null=True, default=None)
+    # Minimum membership role required to use the sandbox debugger.
+    # Choices: admin / team_manager / member. Null = inherit / default to "member".
+    sandbox_min_role = models.CharField(max_length=20, null=True, blank=True, default=None)
     skill_audit = models.ForeignKey(
         SkillAuditRule,
         null=True,
@@ -381,6 +384,7 @@ SETTINGS_FIELDS = [
     "enable_api_access",
     "require_change_summary",
     "allow_agent_skill_updates",
+    "sandbox_min_role",
 ]
 
 FK_SETTINGS_FIELDS = [

@@ -14,7 +14,7 @@ from typing import Literal
 import yaml
 from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Q
-from django.http import HttpResponse
+from django.http import HttpResponse, StreamingHttpResponse
 from django.utils import timezone
 from ninja import Field, File, Router, Schema, Status, UploadedFile
 from ninja.errors import HttpError
@@ -348,21 +348,64 @@ class SkillExecutionRunOut(Schema):
     status: str
     caller_type: str
     requires_approval: bool
+    inputs: dict
     output: dict | None
     output_uri: str
     logs_uri: str
     error_message: str
     external_job_name: str
+    resource_usage: dict
     created_at: str
     updated_at: str
     started_at: str | None
     finished_at: str | None
     expires_at: str | None
+    duration_ms: int | None
+    caller_label: str
+    cancellable: bool
 
 
 class SkillExecutionRunListOut(Schema):
     items: list[SkillExecutionRunOut]
     count: int
+
+
+class SkillExecutionRunLogsOut(Schema):
+    run_id: str
+    status: str
+    logs: str
+    truncated: bool
+    available: bool
+    source: str
+
+
+class SkillFileAiEditIn(Schema):
+    instruction: str = Field(..., min_length=1, max_length=4000)
+    run_id: str | None = None
+    model: str | None = None
+
+
+class SandboxSkillSummaryOut(Schema):
+    id: str
+    slug: str
+    title: str
+    description: str
+    status: str
+    department_name: str
+    team_name: str
+    system_kind: str
+    execution_enabled: bool
+    latest_run: SkillExecutionRunOut | None
+    last_run_at: str | None
+    runs_24h: int
+    failures_24h: int
+
+
+class SandboxOverviewOut(Schema):
+    skills: list[SandboxSkillSummaryOut]
+    can_use_sandbox: bool
+    workspace_min_role: str
+    user_role: str | None
 
 
 class SkillExecutionCallbackIn(Schema):
@@ -909,6 +952,39 @@ def _execution_spec_out(skill: Skill) -> dict:
     }
 
 
+EXECUTION_CANCELLABLE_STATUSES = {
+    SkillExecutionRun.StatusChoices.PENDING_APPROVAL,
+    SkillExecutionRun.StatusChoices.QUEUED,
+    SkillExecutionRun.StatusChoices.RUNNING,
+}
+
+
+def _execution_run_caller_label(run: SkillExecutionRun) -> str:
+    if run.agent_id and getattr(run, "agent", None):
+        agent_name = getattr(run.agent, "name", "") or "Agent"
+        return f"Agent · {agent_name}"
+    if run.user_id and getattr(run, "user", None):
+        user = run.user
+        full_name = (getattr(user, "get_full_name", lambda: "")() or "").strip()
+        label = full_name or getattr(user, "email", "") or "User"
+        return f"User · {label}"
+    if run.caller_type == SkillExecutionRun.CallerTypeChoices.API_KEY:
+        return "API key"
+    if run.caller_type == SkillExecutionRun.CallerTypeChoices.OAUTH:
+        return "OAuth"
+    return run.caller_type or "Unknown"
+
+
+def _execution_run_duration_ms(run: SkillExecutionRun) -> int | None:
+    if run.started_at and run.finished_at:
+        delta = run.finished_at - run.started_at
+        return max(0, int(delta.total_seconds() * 1000))
+    if run.started_at and run.status == SkillExecutionRun.StatusChoices.RUNNING:
+        delta = timezone.now() - run.started_at
+        return max(0, int(delta.total_seconds() * 1000))
+    return None
+
+
 def _execution_run_out(run: SkillExecutionRun) -> dict:
     return {
         "id": str(run.id),
@@ -918,16 +994,21 @@ def _execution_run_out(run: SkillExecutionRun) -> dict:
         "status": run.status,
         "caller_type": run.caller_type,
         "requires_approval": run.status == SkillExecutionRun.StatusChoices.PENDING_APPROVAL,
+        "inputs": run.inputs or {},
         "output": run.output,
         "output_uri": run.output_uri,
         "logs_uri": run.logs_uri,
         "error_message": run.error_message,
         "external_job_name": run.external_job_name,
+        "resource_usage": run.resource_usage or {},
         "created_at": run.created_at.isoformat(),
         "updated_at": run.updated_at.isoformat(),
         "started_at": run.started_at.isoformat() if run.started_at else None,
         "finished_at": run.finished_at.isoformat() if run.finished_at else None,
         "expires_at": run.expires_at.isoformat() if run.expires_at else None,
+        "duration_ms": _execution_run_duration_ms(run),
+        "caller_label": _execution_run_caller_label(run),
+        "cancellable": run.status in EXECUTION_CANCELLABLE_STATUSES,
     }
 
 
@@ -1452,6 +1533,56 @@ def update_skill(request, slug: str, payload: UpdateSkillIn, system_kind: str | 
     return _skill_detail_out(skill, requester_team_id=team_id)
 
 
+SANDBOX_ROLE_ORDER = {
+    RoleChoices.MEMBER: 0,
+    RoleChoices.TEAM_MANAGER: 1,
+    RoleChoices.ADMIN: 2,
+}
+
+
+def _resolve_sandbox_min_role(workspace_id) -> str:
+    """
+    Sandbox access is a workspace-level capability, not a per-skill permission.
+    Per-skill ACLs (visibility, shared_with, system_kind) already do per-skill
+    filtering; this gate only decides who is allowed to use the sandbox tool
+    at all in this workspace.
+    """
+    effective = get_effective_settings(workspace_id)
+    raw = effective.get("sandbox_min_role")
+    if isinstance(raw, str) and raw in SANDBOX_ROLE_ORDER:
+        return raw
+    return RoleChoices.MEMBER
+
+
+def _check_sandbox_access(request, skill: Skill):
+    """Raise 403 if the caller's workspace role is below the sandbox threshold."""
+    if getattr(request, "agent", None) is not None:
+        return
+    if hasattr(request, "api_key") or hasattr(request, "oauth_token"):
+        return  # API/OAuth callers are already scoped via API key permissions
+    user = getattr(request, "user", None)
+    if user is None or not user.is_authenticated:
+        raise HttpError(403, "Sandbox access requires authentication")
+
+    membership = (
+        Membership.objects.filter(workspace=skill.department.team.workspace, user=user)
+        .order_by("-role")
+        .first()
+    )
+    if membership is None:
+        raise HttpError(403, "You do not have sandbox access in this workspace")
+    user_rank = SANDBOX_ROLE_ORDER.get(membership.role, -1)
+    required_rank = SANDBOX_ROLE_ORDER.get(
+        _resolve_sandbox_min_role(skill.department.team.workspace_id), 0
+    )
+    if user_rank < required_rank:
+        raise HttpError(
+            403,
+            "Your workspace role does not include sandbox access. Ask an admin to lower the "
+            "sandbox minimum role.",
+        )
+
+
 def _check_skill_execute_access(request, skill: Skill):
     if skill.status != StatusChoices.PUBLISHED:
         raise HttpError(404, "Skill not found")
@@ -1470,6 +1601,8 @@ def _check_skill_execute_access(request, skill: Skill):
 
     if not allowed.exists():
         raise HttpError(404, "Skill not found")
+
+    _check_sandbox_access(request, skill)
 
 
 def _caller_type(request) -> str:
@@ -1598,7 +1731,9 @@ def execute_skill(
     if status != SkillExecutionRun.StatusChoices.PENDING_APPROVAL:
         dispatch_execution_run(run)
 
-    run = SkillExecutionRun.objects.select_related("skill", "version").get(pk=run.pk)
+    run = SkillExecutionRun.objects.select_related("skill", "version", "agent", "user").get(
+        pk=run.pk
+    )
     return Status(201, _execution_run_out(run))
 
 
@@ -1630,7 +1765,9 @@ def callback_skill_execution_run(request, run_id: str, payload: SkillExecutionCa
         error_message=payload.error_message,
         resource_usage=payload.resource_usage,
     )
-    run = SkillExecutionRun.objects.select_related("skill", "version").get(pk=run.pk)
+    run = SkillExecutionRun.objects.select_related("skill", "version", "agent", "user").get(
+        pk=run.pk
+    )
     return _execution_run_out(run)
 
 
@@ -1651,7 +1788,9 @@ def list_skill_execution_runs(
     _check_skill_execute_access(request, skill)
     limit = min(max(limit, 1), 100)
     offset = max(offset, 0)
-    qs = SkillExecutionRun.objects.select_related("skill", "version").filter(skill=skill)
+    qs = SkillExecutionRun.objects.select_related(
+        "skill", "version", "agent", "user"
+    ).filter(skill=skill)
     agent = getattr(request, "agent", None)
     if agent is not None:
         qs = qs.filter(agent=agent)
@@ -1694,6 +1833,301 @@ def get_skill_execution_run(request, run_id: str):
     ):
         raise HttpError(404, "Execution run not found")
     return _execution_run_out(run)
+
+
+def _load_run_for_caller(request, run_id: str) -> SkillExecutionRun:
+    try:
+        run = SkillExecutionRun.objects.select_related(
+            "skill__department__team",
+            "version",
+            "agent",
+            "user",
+            "spec",
+        ).get(id=run_id, workspace=request.workspace)
+    except SkillExecutionRun.DoesNotExist:
+        raise HttpError(404, "Execution run not found")
+
+    _check_skill_execute_access(request, run.skill)
+    agent = getattr(request, "agent", None)
+    if agent is not None and run.agent_id != agent.id:
+        raise HttpError(404, "Execution run not found")
+    if (
+        agent is None
+        and getattr(request, "user", None)
+        and request.user.is_authenticated
+        and run.user_id
+        and run.user_id != request.user.id
+    ):
+        raise HttpError(404, "Execution run not found")
+    return run
+
+
+MAX_INLINE_LOGS_BYTES = 256 * 1024
+
+
+def _fetch_run_logs(run: SkillExecutionRun) -> tuple[str, bool, str]:
+    """Return (logs_text, truncated, source). Best-effort, never raises."""
+    if not run.logs_uri:
+        return "", False, "none"
+    if not run.logs_uri.startswith("gs://"):
+        return "", False, "unsupported"
+    try:
+        from apps.skills.execution_artifacts import split_gs_uri
+        from google.cloud import storage  # type: ignore[import-not-found]
+    except ImportError:
+        return "", False, "unavailable"
+    try:
+        bucket_name, blob_name = split_gs_uri(run.logs_uri)
+        client = storage.Client()
+        blob = client.bucket(bucket_name).blob(blob_name)
+        if not blob.exists(client):
+            return "", False, "missing"
+        size = blob.size or 0
+        if size > MAX_INLINE_LOGS_BYTES:
+            data = blob.download_as_bytes(start=size - MAX_INLINE_LOGS_BYTES, end=size - 1)
+            text = data.decode("utf-8", errors="replace")
+            return text, True, "gcs"
+        text = blob.download_as_text()
+        return text, False, "gcs"
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("Could not fetch execution logs for run %s: %s", run.id, exc)
+        return "", False, "error"
+
+
+@router.get(
+    "/skill-executions/{run_id}/logs",
+    response=SkillExecutionRunLogsOut,
+    auth=api_or_session,
+    throttle=[ReadThrottle()],
+)
+def get_skill_execution_run_logs(request, run_id: str):
+    run = _load_run_for_caller(request, run_id)
+    logs, truncated, source = _fetch_run_logs(run)
+    available = source == "gcs"
+    return {
+        "run_id": str(run.id),
+        "status": run.status,
+        "logs": logs,
+        "truncated": truncated,
+        "available": available,
+        "source": source,
+    }
+
+
+@router.post(
+    "/skill-executions/{run_id}/cancel",
+    response=SkillExecutionRunOut,
+    auth=api_or_session,
+    throttle=[MutationThrottle()],
+)
+def cancel_skill_execution_run(request, run_id: str):
+    run = _load_run_for_caller(request, run_id)
+    if run.status not in EXECUTION_CANCELLABLE_STATUSES:
+        raise HttpError(409, "Execution run is already terminal")
+
+    now = timezone.now()
+    run.status = SkillExecutionRun.StatusChoices.CANCELLED
+    update_fields = ["status", "updated_at"]
+    if run.started_at is None:
+        run.started_at = now
+        update_fields.append("started_at")
+    run.finished_at = now
+    update_fields.append("finished_at")
+    if not run.error_message:
+        run.error_message = "Execution cancelled by user"
+        update_fields.append("error_message")
+    run.save(update_fields=update_fields)
+
+    run = SkillExecutionRun.objects.select_related("skill", "version", "agent", "user").get(
+        pk=run.pk
+    )
+    return _execution_run_out(run)
+
+
+@router.get(
+    "/sandbox/overview",
+    response=SandboxOverviewOut,
+    auth=api_or_session,
+    throttle=[ReadThrottle()],
+)
+def sandbox_overview(request):
+    workspace = request.workspace
+    user = getattr(request, "user", None)
+
+    membership = None
+    if user is not None and user.is_authenticated:
+        membership = (
+            Membership.objects.filter(workspace=workspace, user=user)
+            .order_by("-role")
+            .first()
+        )
+    user_role = membership.role if membership else None
+
+    effective = get_effective_settings(workspace.id)
+    raw_min_role = effective.get("sandbox_min_role")
+    workspace_min_role = (
+        raw_min_role if isinstance(raw_min_role, str) and raw_min_role in SANDBOX_ROLE_ORDER
+        else RoleChoices.MEMBER
+    )
+
+    if user_role is None:
+        can_use = False
+    else:
+        can_use = (
+            SANDBOX_ROLE_ORDER.get(user_role, -1)
+            >= SANDBOX_ROLE_ORDER.get(workspace_min_role, 0)
+        )
+
+    base_qs = Skill.objects.filter(
+        execution_enabled=True,
+        status=StatusChoices.PUBLISHED,
+        department__team__workspace=workspace,
+    )
+    if hasattr(request, "api_key"):
+        base_qs = apply_api_key_scope(request.api_key, base_qs)
+    elif hasattr(request, "oauth_token"):
+        base_qs = apply_oauth_connection_scope(request, base_qs)
+    else:
+        base_qs = apply_membership_scope(request, base_qs)
+
+    base_qs = base_qs.select_related("department__team")
+    skills_list = list(base_qs[:200])
+
+    twenty_four_h_ago = timezone.now() - timedelta(hours=24)
+    skill_ids = [s.id for s in skills_list]
+    runs_24h_map: dict[str, int] = {}
+    failures_24h_map: dict[str, int] = {}
+    last_run_map: dict[str, SkillExecutionRun] = {}
+    if skill_ids:
+        recent_runs_qs = SkillExecutionRun.objects.filter(
+            skill_id__in=skill_ids,
+            workspace=workspace,
+        ).select_related("skill", "version", "agent", "user").order_by("skill_id", "-created_at")
+        for run in recent_runs_qs:
+            sid = str(run.skill_id)
+            if sid not in last_run_map:
+                last_run_map[sid] = run
+            if run.created_at >= twenty_four_h_ago:
+                runs_24h_map[sid] = runs_24h_map.get(sid, 0) + 1
+                if run.status in {
+                    SkillExecutionRun.StatusChoices.FAILED,
+                    SkillExecutionRun.StatusChoices.TIMEOUT,
+                }:
+                    failures_24h_map[sid] = failures_24h_map.get(sid, 0) + 1
+
+    items = []
+    for skill in skills_list:
+        sid = str(skill.id)
+        latest = last_run_map.get(sid)
+        items.append(
+            {
+                "id": sid,
+                "slug": skill.slug,
+                "title": skill.title,
+                "description": skill.description or "",
+                "status": skill.status,
+                "department_name": skill.department.name,
+                "team_name": skill.department.team.name,
+                "system_kind": skill.department.team.system_kind or "",
+                "execution_enabled": skill.execution_enabled,
+                "latest_run": _execution_run_out(latest) if latest else None,
+                "last_run_at": latest.created_at.isoformat() if latest else None,
+                "runs_24h": runs_24h_map.get(sid, 0),
+                "failures_24h": failures_24h_map.get(sid, 0),
+            }
+        )
+
+    return {
+        "skills": items,
+        "can_use_sandbox": can_use,
+        "workspace_min_role": workspace_min_role,
+        "user_role": user_role,
+    }
+
+
+@router.post(
+    "/skills/{slug}/versions/{version_number}/files/{path}/ai-edit",
+    auth=api_or_session,
+    throttle=[MutationThrottle()],
+)
+@require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER, RoleChoices.MEMBER)
+def stream_skill_file_ai_edit(
+    request,
+    slug: str,
+    version_number: int,
+    path: str,
+    payload: SkillFileAiEditIn,
+    system_kind: str | None = "",
+):
+    from apps.skills.ai_edit import stream_ai_edit
+
+    skill = _get_skill(request, slug, system_kind=system_kind)
+    check_skill_write(request, skill)
+
+    try:
+        version = SkillVersion.objects.get(skill=skill, version_number=version_number)
+    except SkillVersion.DoesNotExist:
+        raise HttpError(404, "Version not found")
+
+    file_qs = VersionFile.objects.filter(
+        skill=skill,
+        version=version,
+        path=path,
+        is_deleted=False,
+    )
+    file = file_qs.first()
+    if file is None:
+        raise HttpError(404, "File not found in this version")
+    if not is_text_file(file.file_type):
+        raise HttpError(400, "AI edit only supports text files")
+
+    file_content = file_bytes(file).decode("utf-8", errors="replace")
+
+    recent_error: str | None = None
+    recent_logs: str | None = None
+    if payload.run_id:
+        try:
+            run = SkillExecutionRun.objects.select_related("skill").get(
+                id=payload.run_id, workspace=request.workspace, skill=skill
+            )
+        except SkillExecutionRun.DoesNotExist:
+            run = None
+        if run is not None:
+            recent_error = run.error_message or None
+            try:
+                logs_text, _truncated, source = _fetch_run_logs(run)
+                if source == "gcs":
+                    recent_logs = logs_text or None
+            except Exception:
+                recent_logs = None
+
+    input_schema: dict | None = None
+    spec = getattr(skill, "execution_spec", None)
+    if spec is not None and isinstance(spec.input_schema, dict) and spec.input_schema:
+        input_schema = spec.input_schema
+
+    skill_description = (skill.description or skill.title or "").strip() or None
+
+    def stream_iter():
+        yield from stream_ai_edit(
+            file_path=file.path,
+            file_type=file.file_type,
+            file_content=file_content,
+            instruction=payload.instruction,
+            skill_description=skill_description,
+            input_schema=input_schema,
+            recent_error=recent_error,
+            recent_logs=recent_logs,
+            model=payload.model,
+        )
+
+    response = StreamingHttpResponse(
+        streaming_content=stream_iter(),
+        content_type="text/event-stream; charset=utf-8",
+    )
+    response["Cache-Control"] = "no-cache, no-transform"
+    response["X-Accel-Buffering"] = "no"
+    return response
 
 
 @router.delete("/skills/{slug}", auth=api_or_session, throttle=[MutationThrottle()])

@@ -319,6 +319,7 @@ class SettingsOut(Schema):
     enable_api_access: bool | None
     require_change_summary: bool | None
     allow_agent_skill_updates: bool | None
+    sandbox_min_role: str | None
     skill_audit: AuditRuleBriefOut | None
     staleness_alert: StalenessAlertRuleBriefOut | None
 
@@ -329,6 +330,7 @@ class EffectiveSettingsOut(Schema):
     enable_api_access: bool | None
     require_change_summary: bool | None
     allow_agent_skill_updates: bool | None
+    sandbox_min_role: str | None
     skill_audit: AuditRuleBriefOut | None
     staleness_alert: StalenessAlertRuleBriefOut | None
 
@@ -342,6 +344,7 @@ class UpsertSettingsIn(Schema):
     enable_api_access: bool | None = None
     require_change_summary: bool | None = None
     allow_agent_skill_updates: bool | None = None
+    sandbox_min_role: str | None = None
     skill_audit_id: str | None = None
     staleness_alert_id: str | None = None
 
@@ -1161,6 +1164,19 @@ def upsert_settings(request, payload: UpsertSettingsIn):
     if payload.department_id and not payload.team_id:
         raise HttpError(400, "team_id is required when department_id is set")
 
+    if payload.sandbox_min_role is not None:
+        if payload.sandbox_min_role not in {"member", "team_manager", "admin"}:
+            raise HttpError(
+                400,
+                "sandbox_min_role must be one of: member, team_manager, admin",
+            )
+        if payload.team_id or payload.department_id:
+            raise HttpError(
+                400,
+                "Sandbox access is a workspace-wide setting; "
+                "switch scope to Workspace to change it.",
+            )
+
     lookup = {
         "workspace": workspace,
         "team_id": payload.team_id,
@@ -1215,6 +1231,7 @@ def upsert_settings(request, payload: UpsertSettingsIn):
         "enable_api_access": settings_row.enable_api_access,
         "require_change_summary": settings_row.require_change_summary,
         "allow_agent_skill_updates": settings_row.allow_agent_skill_updates,
+        "sandbox_min_role": settings_row.sandbox_min_role,
         "skill_audit": _audit_rule_brief(settings_row.skill_audit),
         "staleness_alert": _staleness_alert_brief(settings_row.staleness_alert),
     }
