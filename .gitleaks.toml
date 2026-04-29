@@ -24,6 +24,13 @@ description = "Google Cloud service account JSON key"
 regex = '''"type"\s*:\s*"service_account"'''
 tags = ["gcp", "service-account"]
 
+[[rules.allowlists]]
+description = "False positives from constructing service account metadata from Secret Manager settings"
+commits = [
+    "b252dc40ebfbc87d7376ed0daf675ff58bcd8cda",
+    "bbf604f81ceac28d17607a36be1f5379b6b54d4f",
+]
+
 [[rules]]
 id = "env-file-secret"
 description = "Environment file with secret/token assignment"

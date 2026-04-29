@@ -13,15 +13,20 @@ the developer can see the rewrite take shape and accept it when ready.
 import json
 import logging
 from collections.abc import Iterator
-from typing import Any, Protocol
+from typing import Any
 
 from django.conf import settings
+
+from apps.connectors.capture.llm import (
+    VERTEX_AUTH_SCOPE,
+    _resolve_vertex_project,
+    _vertex_service_account_info,
+)
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
 MAX_OUTPUT_TOKENS = 8192
-VERTEX_AUTH_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 SYSTEM_PROMPT = (
     "You are a senior Python engineer pair-programming inside a sandboxed skill "
     "execution environment. You receive a single file from a user's skill, plus "
@@ -39,10 +44,6 @@ SYSTEM_PROMPT = (
     "4. The first character of your reply must be the first character of the "
     "new file (e.g., 'i' for 'import …', '#' for a shebang, etc.).\n"
 )
-
-
-class _AnthropicModule(Protocol):
-    def AnthropicVertex(self, **kwargs: Any) -> Any: ...
 
 
 def _build_user_prompt(
@@ -82,36 +83,8 @@ def _sse(event: str, data: dict[str, Any]) -> bytes:
     return f"event: {event}\ndata: {payload}\n\n".encode()
 
 
-def _vertex_service_account_info() -> dict[str, str] | None:
-    required_fields = {
-        "project_id": getattr(settings, "VERTEX_CLIENT_PROJECT_ID", ""),
-        "private_key_id": getattr(settings, "VERTEX_CLIENT_PRIVATE_KEY_ID", ""),
-        "private_key": getattr(settings, "VERTEX_CLIENT_PRIVATE_KEY", ""),
-        "client_email": getattr(settings, "VERTEX_CLIENT_EMAIL", ""),
-        "client_id": getattr(settings, "VERTEX_CLIENT_ID", ""),
-        "client_x509_cert_url": getattr(settings, "VERTEX_CLIENT_CERT_URL", ""),
-    }
-    if not all(required_fields.values()):
-        return None
-    return {
-        "type": "service_account",
-        **required_fields,
-        "private_key": required_fields["private_key"].replace("\\n", "\n"),
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-        "universe_domain": "googleapis.com",
-    }
-
-
-def _resolve_vertex_project() -> str:
-    if _vertex_service_account_info() is not None:
-        return getattr(settings, "VERTEX_CLIENT_PROJECT_ID", "")
-    return getattr(settings, "VERTEX_PROJECT_ID", "")
-
-
 def _vertex_service_account_access_token() -> str | None:
-    credentials_info = _vertex_service_account_info()
+    credentials_info = _vertex_service_account_info(settings)
     if credentials_info is None:
         return None
 
@@ -125,7 +98,7 @@ def _vertex_service_account_access_token() -> str | None:
     return str(credentials.token) if credentials.token else None
 
 
-def _build_anthropic_vertex_client(anthropic: _AnthropicModule, *, project: str, location: str):
+def _build_anthropic_vertex_client(anthropic: Any, *, project: str, location: str):
     client_kwargs: dict[str, Any] = {
         "project_id": project,
         "region": location,
@@ -155,7 +128,7 @@ def stream_ai_edit(
         yield _sse("error", {"message": "anthropic SDK is not installed"})
         return
 
-    project = _resolve_vertex_project()
+    project = _resolve_vertex_project(settings)
     location = getattr(settings, "VERTEX_LOCATION", "global")
     if not project:
         yield _sse(

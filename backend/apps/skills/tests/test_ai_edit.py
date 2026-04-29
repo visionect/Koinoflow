@@ -7,9 +7,13 @@ class FakeAnthropic:
     def __init__(self):
         self.kwargs = None
 
-    def AnthropicVertex(self, **kwargs):
-        self.kwargs = kwargs
-        return object()
+        def vertex_client(**kwargs):
+            self.kwargs = kwargs
+            return object()
+
+        self.AnthropicVertex = vertex_client
+
+    AnthropicVertex: object
 
 
 def test_anthropic_vertex_client_uses_configured_service_account(settings):
@@ -53,4 +57,4 @@ def test_resolve_vertex_project_falls_back_to_runtime_project(settings):
     settings.VERTEX_CLIENT_PROJECT_ID = "visionect-gce-infra"
     settings.VERTEX_CLIENT_PRIVATE_KEY_ID = ""
 
-    assert ai_edit._resolve_vertex_project() == "koinoflow-infra"
+    assert ai_edit._resolve_vertex_project(settings) == "koinoflow-infra"
