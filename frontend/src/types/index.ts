@@ -287,31 +287,72 @@ export interface UpdateSkillExecutionSpecInput {
   limits: SkillExecutionSpec["limits"]
 }
 
+export type SkillExecutionRunStatus =
+  | "pending_approval"
+  | "queued"
+  | "running"
+  | "succeeded"
+  | "failed"
+  | "timeout"
+  | "cancelled"
+
 export interface SkillExecutionRun {
   id: string
   skill_id: string
   skill_slug: string
   version_number: number | null
-  status:
-    | "pending_approval"
-    | "queued"
-    | "running"
-    | "succeeded"
-    | "failed"
-    | "timeout"
-    | "cancelled"
+  status: SkillExecutionRunStatus
   caller_type: "user" | "agent" | "api_key" | "oauth"
   requires_approval: boolean
+  inputs: Record<string, unknown>
   output: Record<string, unknown> | null
   output_uri: string
   logs_uri: string
   error_message: string
   external_job_name: string
+  resource_usage: Record<string, unknown>
   created_at: string
   updated_at: string
   started_at: string | null
   finished_at: string | null
   expires_at: string | null
+  duration_ms: number | null
+  caller_label: string
+  cancellable: boolean
+}
+
+export interface SkillExecutionRunLogs {
+  run_id: string
+  status: SkillExecutionRunStatus
+  logs: string
+  truncated: boolean
+  available: boolean
+  source: "gcs" | "none" | "missing" | "unavailable" | "unsupported" | "error" | string
+}
+
+export type SandboxMinRole = "member" | "team_manager" | "admin"
+
+export interface SandboxSkillSummary {
+  id: string
+  slug: string
+  title: string
+  description: string
+  status: string
+  department_name: string
+  team_name: string
+  system_kind: string
+  execution_enabled: boolean
+  latest_run: SkillExecutionRun | null
+  last_run_at: string | null
+  runs_24h: number
+  failures_24h: number
+}
+
+export interface SandboxOverview {
+  skills: SandboxSkillSummary[]
+  can_use_sandbox: boolean
+  workspace_min_role: SandboxMinRole
+  user_role: string | null
 }
 
 export interface ProcessAuditRule {
@@ -362,6 +403,7 @@ export interface EffectiveSettings {
   enable_api_access: boolean | null
   require_change_summary: boolean | null
   allow_agent_skill_updates: boolean | null
+  sandbox_min_role: SandboxMinRole | null
   skill_audit: ProcessAuditRuleBrief | null
   staleness_alert: StalenessAlertRuleBrief | null
 }
@@ -375,6 +417,7 @@ export interface UpsertSettingsInput {
   enable_api_access?: boolean | null
   require_change_summary?: boolean | null
   allow_agent_skill_updates?: boolean | null
+  sandbox_min_role?: SandboxMinRole | null
   skill_audit_id?: string | null
   staleness_alert_id?: string | null
 }

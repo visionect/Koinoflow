@@ -47,7 +47,9 @@ import type {
   ProcessListFilters,
   SkillUsageSummary,
   SkillExecutionRun,
+  SkillExecutionRunLogs,
   SkillExecutionSpec,
+  SandboxOverview,
   SkillVersion,
   SkillVersionBrief,
   PromoteCandidateInput,
@@ -241,6 +243,7 @@ export const queryKeys = {
     executionRuns: (slug: string, systemKind?: SkillSystemKind) =>
       ["skills", "execution-runs", slug, skillScopeKey(systemKind)] as const,
     executionRun: (runId: string) => ["skills", "execution-run", runId] as const,
+    executionRunLogs: (runId: string) => ["skills", "execution-run", runId, "logs"] as const,
   },
   settings: {
     effective: (teamId?: string, departmentId?: string) =>
@@ -266,6 +269,9 @@ export const queryKeys = {
   },
   mcp: {
     connections: ["mcp", "connections"] as const,
+  },
+  sandbox: {
+    overview: ["sandbox", "overview"] as const,
   },
   onboarding: {
     progress: ["onboarding", "progress"] as const,
@@ -721,8 +727,83 @@ export function useSkillExecutionRuns(slug: string, systemKind?: SkillSystemKind
       ),
     enabled: Boolean(slug),
     refetchInterval: (query) => {
-      const latest = query.state.data?.items?.[0]
-      return latest?.status === "queued" || latest?.status === "running" ? 2000 : false
+      const items = query.state.data?.items ?? []
+      const hasActive = items.some(
+        (run) =>
+          run.status === "queued" || run.status === "running" || run.status === "pending_approval",
+      )
+      return hasActive ? 2000 : false
+    },
+  })
+}
+
+const ACTIVE_RUN_STATUSES: readonly SkillExecutionRun["status"][] = [
+  "pending_approval",
+  "queued",
+  "running",
+]
+
+export function useSkillExecutionRun(runId: string | null | undefined) {
+  return useQuery({
+    queryKey: runId
+      ? queryKeys.skills.executionRun(runId)
+      : (["skills", "execution-run", "disabled"] as const),
+    queryFn: () => apiFetch<SkillExecutionRun>(`/skill-executions/${runId}`),
+    enabled: Boolean(runId),
+    refetchInterval: (query) => {
+      const data = query.state.data as SkillExecutionRun | undefined
+      return data && ACTIVE_RUN_STATUSES.includes(data.status) ? 2000 : false
+    },
+  })
+}
+
+export function useSkillExecutionRunLogs(
+  runId: string | null | undefined,
+  options: { isActive?: boolean } = {},
+) {
+  const { isActive = false } = options
+  return useQuery({
+    queryKey: runId
+      ? queryKeys.skills.executionRunLogs(runId)
+      : (["skills", "execution-run", "disabled", "logs"] as const),
+    queryFn: () => apiFetch<SkillExecutionRunLogs>(`/skill-executions/${runId}/logs`),
+    enabled: Boolean(runId),
+    refetchInterval: isActive ? 3000 : false,
+    staleTime: isActive ? 0 : 5_000,
+  })
+}
+
+export function useSandboxOverview() {
+  return useQuery({
+    queryKey: queryKeys.sandbox.overview,
+    queryFn: () => apiFetch<SandboxOverview>(`/sandbox/overview`),
+    refetchInterval: (query) => {
+      const items = (query.state.data as SandboxOverview | undefined)?.skills ?? []
+      const hasActive = items.some((s) => {
+        const status = s.latest_run?.status
+        return status === "queued" || status === "running" || status === "pending_approval"
+      })
+      return hasActive ? 3000 : 30_000
+    },
+  })
+}
+
+export function useCancelSkillExecutionRun(slug: string, systemKind?: SkillSystemKind) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (runId: string) =>
+      apiFetch<SkillExecutionRun>(`/skill-executions/${runId}/cancel`, {
+        method: "POST",
+      }),
+    onSuccess: async (run) => {
+      queryClient.setQueryData(queryKeys.skills.executionRun(run.id), run)
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.skills.executionRuns(slug, systemKind),
+        }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.executionRun(run.id) }),
+      ])
     },
   })
 }

@@ -442,6 +442,63 @@ export function SettingsPage() {
             )
           })}
 
+          {/* Sandbox access row — workspace-scope only */}
+          <div className="rounded-lg border p-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="space-y-0.5">
+                <p className="text-sm font-medium">Sandbox access</p>
+                <p className="text-xs text-muted-foreground">
+                  Minimum workspace role required to use the sandbox debugger (run skills, view
+                  logs, edit code with AI assist). This is a workspace-wide setting — per-skill
+                  visibility is already enforced by department visibility and sharing rules.
+                </p>
+                {isSubScope ? (
+                  <p className="pt-1 text-[11px] text-muted-foreground">
+                    Switch scope to <strong>Workspace</strong> to change this.
+                  </p>
+                ) : null}
+              </div>
+              {isAdmin && !isSubScope ? (
+                <Select
+                  value={settingsQuery.data?.sandbox_min_role ?? "member"}
+                  onValueChange={(value) => {
+                    if (!workspaceQuery.data) return
+                    const next = value as "member" | "team_manager" | "admin"
+                    void upsertSettings
+                      .mutateAsync({
+                        workspace_id: workspaceQuery.data.id,
+                        team_id: null,
+                        department_id: null,
+                        sandbox_min_role: next,
+                      })
+                      .then(() => toast.success("Sandbox access updated"))
+                      .catch((error) =>
+                        toast.error(
+                          error instanceof Error ? error.message : "Unable to update sandbox access",
+                        ),
+                      )
+                  }}
+                  disabled={upsertSettings.isPending}
+                >
+                  <SelectTrigger className="w-44 shrink-0">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="member">Members & above</SelectItem>
+                    <SelectItem value="team_manager">Team managers & admins</SelectItem>
+                    <SelectItem value="admin">Admins only</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Badge variant="secondary" className="capitalize">
+                  {settingsQuery.data?.sandbox_min_role
+                    ? settingsQuery.data.sandbox_min_role.replace("_", " ")
+                    : "Members & above"}
+                </Badge>
+              )}
+            </div>
+          </div>
+
           {/* Skill audit row */}
           <div className="rounded-lg border p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
