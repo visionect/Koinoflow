@@ -2005,7 +2005,7 @@ def fetch_skill_execution_secrets(request, run_id: str):
         try:
             run = (
                 SkillExecutionRun.objects.select_for_update()
-                .select_related("skill", "spec", "workspace")
+                .select_related("skill", "workspace")
                 .get(id=run_id)
             )
         except SkillExecutionRun.DoesNotExist:
