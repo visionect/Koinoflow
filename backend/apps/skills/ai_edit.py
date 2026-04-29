@@ -55,10 +55,7 @@ def _build_user_prompt(
     if skill_description:
         parts.append(f"# Skill description\n{skill_description.strip()}\n")
     if input_schema:
-        parts.append(
-            "# Input schema\n"
-            f"```json\n{json.dumps(input_schema, indent=2)}\n```\n"
-        )
+        parts.append(f"# Input schema\n```json\n{json.dumps(input_schema, indent=2)}\n```\n")
     if recent_error:
         parts.append(f"# Most recent error\n```\n{recent_error.strip()}\n```\n")
     if recent_logs:
@@ -66,13 +63,11 @@ def _build_user_prompt(
         snippet = recent_logs[-4096:]
         parts.append(f"# Most recent stderr / logs (tail)\n```\n{snippet}\n```\n")
     parts.append(
-        f"# File to edit: `{file_path}` ({file_type})\n"
-        f"```{file_type or ''}\n{file_content}\n```\n"
+        f"# File to edit: `{file_path}` ({file_type})\n```{file_type or ''}\n{file_content}\n```\n"
     )
     parts.append(f"# Instruction\n{instruction.strip()}\n")
     parts.append(
-        "# Your reply\n"
-        "Output the complete new contents of the file above. No fences, no prose."
+        "# Your reply\nOutput the complete new contents of the file above. No fences, no prose."
     )
     return "\n".join(parts)
 

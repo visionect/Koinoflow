@@ -1788,9 +1788,9 @@ def list_skill_execution_runs(
     _check_skill_execute_access(request, skill)
     limit = min(max(limit, 1), 100)
     offset = max(offset, 0)
-    qs = SkillExecutionRun.objects.select_related(
-        "skill", "version", "agent", "user"
-    ).filter(skill=skill)
+    qs = SkillExecutionRun.objects.select_related("skill", "version", "agent", "user").filter(
+        skill=skill
+    )
     agent = getattr(request, "agent", None)
     if agent is not None:
         qs = qs.filter(agent=agent)
@@ -1958,25 +1958,23 @@ def sandbox_overview(request):
     membership = None
     if user is not None and user.is_authenticated:
         membership = (
-            Membership.objects.filter(workspace=workspace, user=user)
-            .order_by("-role")
-            .first()
+            Membership.objects.filter(workspace=workspace, user=user).order_by("-role").first()
         )
     user_role = membership.role if membership else None
 
     effective = get_effective_settings(workspace.id)
     raw_min_role = effective.get("sandbox_min_role")
     workspace_min_role = (
-        raw_min_role if isinstance(raw_min_role, str) and raw_min_role in SANDBOX_ROLE_ORDER
+        raw_min_role
+        if isinstance(raw_min_role, str) and raw_min_role in SANDBOX_ROLE_ORDER
         else RoleChoices.MEMBER
     )
 
     if user_role is None:
         can_use = False
     else:
-        can_use = (
-            SANDBOX_ROLE_ORDER.get(user_role, -1)
-            >= SANDBOX_ROLE_ORDER.get(workspace_min_role, 0)
+        can_use = SANDBOX_ROLE_ORDER.get(user_role, -1) >= SANDBOX_ROLE_ORDER.get(
+            workspace_min_role, 0
         )
 
     base_qs = Skill.objects.filter(
@@ -2000,10 +1998,14 @@ def sandbox_overview(request):
     failures_24h_map: dict[str, int] = {}
     last_run_map: dict[str, SkillExecutionRun] = {}
     if skill_ids:
-        recent_runs_qs = SkillExecutionRun.objects.filter(
-            skill_id__in=skill_ids,
-            workspace=workspace,
-        ).select_related("skill", "version", "agent", "user").order_by("skill_id", "-created_at")
+        recent_runs_qs = (
+            SkillExecutionRun.objects.filter(
+                skill_id__in=skill_ids,
+                workspace=workspace,
+            )
+            .select_related("skill", "version", "agent", "user")
+            .order_by("skill_id", "-created_at")
+        )
         for run in recent_runs_qs:
             sid = str(run.skill_id)
             if sid not in last_run_map:
