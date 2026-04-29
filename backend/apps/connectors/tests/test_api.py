@@ -4,7 +4,6 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
-from config.api import api
 from django.conf import settings
 from django.core.cache import cache
 from django.test import Client as DjangoTestClient
@@ -19,6 +18,7 @@ from apps.connectors.tests.factories import (
 )
 from apps.orgs.models import Membership
 from apps.orgs.tests.factories import MembershipFactory, WorkspaceFactory
+from config.api import api
 
 
 @pytest.fixture

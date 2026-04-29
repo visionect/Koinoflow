@@ -1,4 +1,5 @@
 from django.conf import settings
+
 from tasks.registry import register_task
 
 

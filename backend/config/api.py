@@ -1,3 +1,5 @@
+from ninja import NinjaAPI
+
 from apps.accounts.api import router as auth_router
 from apps.accounts.mcp_api import router as mcp_router
 from apps.agents.api import router as agents_router
@@ -7,7 +9,6 @@ from apps.orgs.api import router as orgs_router
 from apps.orgs.api_keys import router as api_keys_router
 from apps.skills.api import router as skills_router
 from apps.usage.api import router as usage_router
-from ninja import NinjaAPI
 
 api = NinjaAPI(
     title="Koinoflow API",
