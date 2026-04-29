@@ -1872,8 +1872,9 @@ def _fetch_run_logs(run: SkillExecutionRun) -> tuple[str, bool, str]:
     if not run.logs_uri.startswith("gs://"):
         return "", False, "unsupported"
     try:
-        from apps.skills.execution_artifacts import split_gs_uri
         from google.cloud import storage  # type: ignore[import-not-found]
+
+        from apps.skills.execution_artifacts import split_gs_uri
     except ImportError:
         return "", False, "unavailable"
     try:

@@ -79,7 +79,7 @@ def _build_user_prompt(
 
 def _sse(event: str, data: dict[str, Any]) -> bytes:
     payload = json.dumps(data, separators=(",", ":"))
-    return f"event: {event}\ndata: {payload}\n\n".encode("utf-8")
+    return f"event: {event}\ndata: {payload}\n\n".encode()
 
 
 def stream_ai_edit(
