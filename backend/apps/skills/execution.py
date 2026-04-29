@@ -16,7 +16,11 @@ from apps.skills.models import (
     SkillExecutionQuotaCounter,
     SkillExecutionRun,
     SkillExecutionSpec,
+    SkillSecretAccessLog,
+    SkillSecretDeclaration,
+    SkillSecretValue,
 )
+from apps.skills.secret_crypto import decrypt_secret_value
 
 RETENTION_DAYS = 30
 HIGH_APPROVAL_RISKS = {"high", "critical"}
@@ -103,14 +107,12 @@ def _callback_secret() -> str:
     return str(secret)
 
 
-def issue_callback_token(run: SkillExecutionRun) -> str:
-    expires_at = int(
-        (timezone.now() + timedelta(seconds=run.spec.timeout_seconds + 300)).timestamp()
-    )
-    payload = {
-        "run_id": str(run.id),
-        "exp": expires_at,
-    }
+def _token_ttl_seconds(run: SkillExecutionRun) -> int:
+    timeout_seconds = run.spec.timeout_seconds if run.spec else 30
+    return int(timeout_seconds + 300)
+
+
+def _encode_token(payload: dict) -> str:
     encoded = (
         base64.urlsafe_b64encode(
             json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
@@ -126,28 +128,173 @@ def issue_callback_token(run: SkillExecutionRun) -> str:
     return f"{encoded}.{signature}"
 
 
-def validate_callback_token(token: str, run_id: str) -> bool:
+def _decode_token(token: str) -> dict | None:
     try:
         encoded, signature = token.split(".", 1)
     except ValueError:
-        return False
+        return None
     expected = hmac.new(
         _callback_secret().encode("utf-8"),
         encoded.encode("utf-8"),
         digestmod=hashlib.sha256,
     ).hexdigest()
     if not hmac.compare_digest(signature, expected):
-        return False
+        return None
 
     try:
         padded = encoded + ("=" * (-len(encoded) % 4))
         payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8"))
     except (ValueError, json.JSONDecodeError):
+        return None
+    return payload
+
+
+def issue_callback_token(run: SkillExecutionRun) -> str:
+    expires_at = int((timezone.now() + timedelta(seconds=_token_ttl_seconds(run))).timestamp())
+    return _encode_token(
+        {
+            "run_id": str(run.id),
+            "exp": expires_at,
+            "purpose": "callback",
+        }
+    )
+
+
+def issue_secret_fetch_token(run: SkillExecutionRun, secret_names: list[str]) -> str:
+    expires_at = int((timezone.now() + timedelta(seconds=_token_ttl_seconds(run))).timestamp())
+    return _encode_token(
+        {
+            "run_id": str(run.id),
+            "exp": expires_at,
+            "purpose": "secrets",
+            "names": sorted(set(secret_names)),
+        }
+    )
+
+
+def validate_callback_token(token: str, run_id: str) -> bool:
+    payload = _decode_token(token)
+    if not payload:
         return False
 
-    return payload.get("run_id") == str(run_id) and int(payload.get("exp", 0)) >= int(
-        timezone.now().timestamp()
+    return (
+        payload.get("run_id") == str(run_id)
+        and payload.get("purpose", "callback") == "callback"
+        and int(payload.get("exp", 0)) >= int(timezone.now().timestamp())
     )
+
+
+def validate_secret_fetch_token(token: str, run_id: str) -> list[str] | None:
+    payload = _decode_token(token)
+    if not payload:
+        return None
+    if payload.get("run_id") != str(run_id):
+        return None
+    if payload.get("purpose") != "secrets":
+        return None
+    if int(payload.get("exp", 0)) < int(timezone.now().timestamp()):
+        return None
+    names = payload.get("names")
+    if not isinstance(names, list):
+        return None
+    return [str(name) for name in names if isinstance(name, str)]
+
+
+def _declared_secret_refs(spec: SkillExecutionSpec | None) -> list[SkillSecretDeclaration]:
+    if spec is None:
+        return []
+    return list(spec.secret_refs.all().order_by("name"))
+
+
+def _resolve_secret_value_rows(run: SkillExecutionRun) -> dict[tuple[str, str], SkillSecretValue]:
+    refs = _declared_secret_refs(run.spec)
+    if not refs:
+        return {}
+    names = sorted({ref.name for ref in refs})
+    scopes = sorted({ref.scope for ref in refs})
+    rows = SkillSecretValue.objects.filter(
+        skill=run.skill,
+        workspace=run.workspace,
+        name__in=names,
+        scope__in=scopes,
+    )
+    return {(row.name, row.scope): row for row in rows}
+
+
+def ensure_required_secrets_present(run: SkillExecutionRun) -> list[str]:
+    refs = _declared_secret_refs(run.spec)
+    if not refs:
+        return []
+    rows = _resolve_secret_value_rows(run)
+    missing = [ref.name for ref in refs if ref.required and (ref.name, ref.scope) not in rows]
+    if missing:
+        raise HttpError(
+            400,
+            f"Missing required secret value(s): {', '.join(sorted(set(missing)))}",
+        )
+    return sorted({ref.name for ref in refs if (ref.name, ref.scope) in rows})
+
+
+def fetch_run_secret_values(run: SkillExecutionRun, allowed_names: list[str]) -> dict[str, str]:
+    refs = _declared_secret_refs(run.spec)
+    if not refs:
+        return {}
+
+    allowed = set(allowed_names)
+    rows = _resolve_secret_value_rows(run)
+    values: dict[str, str] = {}
+    logs: list[SkillSecretAccessLog] = []
+    for ref in refs:
+        if ref.name not in allowed:
+            logs.append(
+                SkillSecretAccessLog(
+                    run=run,
+                    skill=run.skill,
+                    workspace=run.workspace,
+                    name=ref.name,
+                    granted=False,
+                    failure_reason="not_allowed",
+                )
+            )
+            continue
+
+        row = rows.get((ref.name, ref.scope))
+        if row is None:
+            reason = "missing"
+            logs.append(
+                SkillSecretAccessLog(
+                    run=run,
+                    skill=run.skill,
+                    workspace=run.workspace,
+                    name=ref.name,
+                    granted=False,
+                    failure_reason=reason,
+                )
+            )
+            if ref.required:
+                SkillSecretAccessLog.objects.bulk_create(logs)
+                raise HttpError(400, f"Missing required secret value: {ref.name}")
+            continue
+
+        value = decrypt_secret_value(
+            wrapped_dek=bytes(row.wrapped_dek),
+            ciphertext=bytes(row.ciphertext),
+        )
+        values[ref.name] = value
+        logs.append(
+            SkillSecretAccessLog(
+                run=run,
+                skill=run.skill,
+                workspace=run.workspace,
+                name=ref.name,
+                granted=True,
+                failure_reason="",
+            )
+        )
+
+    if logs:
+        SkillSecretAccessLog.objects.bulk_create(logs)
+    return values
 
 
 def apply_execution_callback(
@@ -259,12 +406,15 @@ def _dispatch_cloud_run_job(run: SkillExecutionRun):
 
     spec = run.spec
     version_number = run.version.version_number if run.version_id else ""
-    artifacts = prepare_execution_artifacts(run)
     base_url = getattr(settings, "SKILL_EXECUTION_PUBLIC_BASE_URL", "").rstrip("/")
     if not base_url:
         raise HttpError(500, "Skill execution callback base URL is not configured")
     callback_url = f"{base_url}/api/v1/skill-executions/{run.id}/callback"
+    secrets_fetch_url = f"{base_url}/api/v1/skill-executions/{run.id}/secrets"
     callback_token = issue_callback_token(run)
+    secret_names = ensure_required_secrets_present(run)
+    secrets_fetch_token = issue_secret_fetch_token(run, secret_names)
+    artifacts = prepare_execution_artifacts(run)
     url = f"https://run.googleapis.com/v2/projects/{project}/locations/{location}/jobs/{job}:run"
     payload = {
         "overrides": {
@@ -285,6 +435,9 @@ def _dispatch_cloud_run_job(run: SkillExecutionRun):
                         {"name": "KOINOFLOW_LOGS_URI", "value": artifacts.logs_uri},
                         {"name": "KOINOFLOW_CALLBACK_URL", "value": callback_url},
                         {"name": "KOINOFLOW_CALLBACK_TOKEN", "value": callback_token},
+                        {"name": "KOINOFLOW_SECRETS_FETCH_URL", "value": secrets_fetch_url},
+                        {"name": "KOINOFLOW_SECRETS_FETCH_TOKEN", "value": secrets_fetch_token},
+                        {"name": "KOINOFLOW_SECRETS_NAMES", "value": ",".join(secret_names)},
                     ]
                 }
             ],
@@ -318,6 +471,7 @@ def _dispatch_cloud_run_job(run: SkillExecutionRun):
         "package_uri": artifacts.package_uri,
         "inputs_uri": artifacts.inputs_uri,
         "manifest_uri": artifacts.manifest_uri,
+        "secret_names": secret_names,
     }
     run.save(
         update_fields=[

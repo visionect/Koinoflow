@@ -260,7 +260,13 @@ export interface SkillExecutionSpec {
   entrypoint_path: string
   input_schema: Record<string, unknown>
   output_schema: Record<string, unknown>
-  secrets_scope: "department"
+  secrets_scope: "workspace" | "user" | "platform"
+  secret_refs: Array<{
+    name: string
+    scope: "workspace" | "user" | "platform"
+    required: boolean
+    description: string
+  }>
   network: {
     policy: "egress_allowlist" | "none"
     allowed: string[]
@@ -275,6 +281,16 @@ export interface SkillExecutionSpec {
   updated_at: string | null
 }
 
+export interface SkillSecretStatus {
+  name: string
+  scope: "workspace" | "user" | "platform"
+  required: boolean
+  description: string
+  is_set: boolean
+  last_set_at: string | null
+  last_set_by: User | null
+}
+
 export interface UpdateSkillExecutionSpecInput {
   enabled: boolean
   runtime: "python"
@@ -282,7 +298,8 @@ export interface UpdateSkillExecutionSpecInput {
   entrypoint_path: string
   input_schema: Record<string, unknown>
   output_schema: Record<string, unknown>
-  secrets_scope: "department"
+  secrets_scope: "workspace" | "user" | "platform"
+  secret_refs: SkillExecutionSpec["secret_refs"]
   network: SkillExecutionSpec["network"]
   limits: SkillExecutionSpec["limits"]
 }

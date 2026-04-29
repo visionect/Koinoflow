@@ -49,6 +49,7 @@ import type {
   SkillExecutionRun,
   SkillExecutionRunLogs,
   SkillExecutionSpec,
+  SkillSecretStatus,
   SandboxOverview,
   SkillVersion,
   SkillVersionBrief,
@@ -244,6 +245,8 @@ export const queryKeys = {
       ["skills", "execution-runs", slug, skillScopeKey(systemKind)] as const,
     executionRun: (runId: string) => ["skills", "execution-run", runId] as const,
     executionRunLogs: (runId: string) => ["skills", "execution-run", runId, "logs"] as const,
+    secrets: (slug: string, systemKind?: SkillSystemKind) =>
+      ["skills", "secrets", slug, skillScopeKey(systemKind)] as const,
   },
   settings: {
     effective: (teamId?: string, departmentId?: string) =>
@@ -697,6 +700,46 @@ export function useUpdateSkillExecutionSpec(slug: string, systemKind?: SkillSyst
         queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug, systemKind) }),
         queryClient.invalidateQueries({ queryKey: ["skills"] }),
       ])
+    },
+  })
+}
+
+export function useSkillSecrets(slug: string, systemKind?: SkillSystemKind) {
+  return useQuery({
+    queryKey: queryKeys.skills.secrets(slug, systemKind),
+    queryFn: () =>
+      apiFetch<PaginatedResponse<SkillSecretStatus>>(
+        `/skills/${slug}/secrets${buildSkillScopeQuery(systemKind)}`,
+      ),
+    enabled: Boolean(slug),
+  })
+}
+
+export function useUpsertSkillSecret(slug: string, systemKind?: SkillSystemKind) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ name, value }: { name: string; value: string }) =>
+      apiFetch<SkillSecretStatus>(`/skills/${slug}/secrets/${name}${buildSkillScopeQuery(systemKind)}`, {
+        method: "PUT",
+        body: JSON.stringify({ value }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.skills.secrets(slug, systemKind) })
+    },
+  })
+}
+
+export function useDeleteSkillSecret(slug: string, systemKind?: SkillSystemKind) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiFetch<ApiOkResponse>(`/skills/${slug}/secrets/${name}${buildSkillScopeQuery(systemKind)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.skills.secrets(slug, systemKind) })
     },
   })
 }

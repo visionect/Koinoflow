@@ -235,7 +235,8 @@ class TestSkillExecution:
                 "additionalProperties": False,
             },
             "output_schema": {},
-            "secrets_scope": "department",
+            "secrets_scope": "workspace",
+            "secret_refs": [],
             "network": {"policy": "egress_allowlist", "allowed": ["api.example.com"]},
             "limits": {
                 "timeout_seconds": 30,
@@ -299,7 +300,8 @@ class TestSkillExecution:
                 "entrypoint_path": "run.py",
                 "input_schema": {},
                 "output_schema": {},
-                "secrets_scope": "department",
+                "secrets_scope": "workspace",
+                "secret_refs": [],
                 "network": {"policy": "egress_allowlist", "allowed": []},
                 "limits": {
                     "timeout_seconds": 30,
@@ -1825,6 +1827,39 @@ class TestGetFileContent:
 
         resp = auth_client.get("/api/v1/skills/proc-fc2/versions/1/files/missing.py")
         assert resp.status_code == 404
+
+
+@pytest.mark.django_db
+class TestSkillFileAiEdit:
+    def test_ai_edit_uses_resolved_version_file(self, auth_client, admin_membership, monkeypatch):
+        dept = _make_dept_for_files(admin_membership.workspace)
+        skill = SkillFactory(department=dept, slug="proc-ai-edit")
+        v1 = SkillVersionFactory(skill=skill, version_number=1)
+        SkillVersionFactory(skill=skill, version_number=2)
+        VersionFileFactory(
+            version=v1,
+            path="test.py",
+            content="print('before')",
+            file_type="python",
+        )
+        seen = {}
+
+        def fake_stream_ai_edit(**kwargs):
+            seen.update(kwargs)
+            yield b'event: done\ndata: {"stop_reason":"end_turn","model":"fake","usage":{}}\n\n'
+
+        monkeypatch.setattr("apps.skills.ai_edit.stream_ai_edit", fake_stream_ai_edit)
+
+        resp = auth_client.post(
+            "/api/v1/skills/proc-ai-edit/versions/2/files/test.py/ai-edit",
+            data={"instruction": "say hello"},
+            content_type="application/json",
+        )
+
+        assert resp.status_code == 200
+        assert b"event: done" in b"".join(resp.streaming_content)
+        assert seen["file_content"] == "print('before')"
+        assert seen["instruction"] == "say hello"
 
 
 @pytest.mark.django_db

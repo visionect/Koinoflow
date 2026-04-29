@@ -8,7 +8,11 @@ from apps.skills.enums import StatusChoices
 from apps.skills.execution import issue_callback_token
 from apps.skills.execution_artifacts import prepare_execution_artifacts
 from apps.skills.models import SkillExecutionRun, SkillExecutionSpec, VersionFile
-from apps.skills.tests.factories import SkillFactory, SkillVersionFactory, VersionFileFactory
+from apps.skills.tests.factories import (
+    SkillFactory,
+    SkillVersionFactory,
+    VersionFileFactory,
+)
 
 
 @pytest.mark.django_db
@@ -71,7 +75,9 @@ class TestExecutionArtifacts:
         assert json.loads(inputs_data.decode()) == {"name": "Ada"}
         manifest_data, manifest_type = uploads[artifacts.manifest_uri]
         assert manifest_type == "application/json"
-        assert json.loads(manifest_data.decode())["entrypoint_path"] == "run.py"
+        manifest = json.loads(manifest_data.decode())
+        assert manifest["entrypoint_path"] == "run.py"
+        assert manifest["secret_refs"] == []
 
     def test_prepare_execution_artifacts_rejects_missing_entrypoint(
         self, admin_membership, settings
