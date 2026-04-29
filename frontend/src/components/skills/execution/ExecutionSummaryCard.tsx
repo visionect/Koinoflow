@@ -51,6 +51,7 @@ export function ExecutionSummaryCard({
         input_schema: spec.input_schema,
         output_schema: spec.output_schema,
         secrets_scope: spec.secrets_scope,
+        secret_refs: spec.secret_refs,
         network: spec.network,
         limits: spec.limits,
       })

@@ -11,7 +11,16 @@ from executor.run import _safe_extract, _scrub_logs
 
 def test_scrub_logs_redacts_secret_lines():
     logs = "hello\nAPI_KEY=secret\nall good"
-    assert _scrub_logs(logs) == "hello\n[scrubbed potentially sensitive log line]\nall good"
+    assert (
+        _scrub_logs(logs)
+        == "hello\n[scrubbed potentially sensitive log line]\nall good"
+    )
+
+
+def test_scrub_logs_redacts_secret_literal_values():
+    logs = "token=abc123\nsafe line"
+    scrubbed = _scrub_logs(logs, secret_values={"OPENAI_API_KEY": "abc123"})
+    assert "abc123" not in scrubbed
 
 
 def test_safe_extract_rejects_path_traversal(tmp_path):

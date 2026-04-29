@@ -12,15 +12,19 @@ import { toast } from "sonner"
 
 import {
   useCancelSkillExecutionRun,
+  useDeleteSkillSecret,
   useExecuteSkill,
   useSkillExecutionRun,
   useSkillExecutionRuns,
   useSkillExecutionSpec,
+  useSkillSecrets,
+  useUpsertSkillSecret,
   type SkillSystemKind,
 } from "@/api/client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -362,7 +366,14 @@ export function ExecutionDebugger({
           >
             <ScrollArea className="h-full">
               <div className="space-y-3 p-5">
-                {spec ? <SpecDetail spec={spec} /> : null}
+                {spec ? (
+                  <SpecDetail
+                    spec={spec}
+                    skillSlug={skillSlug}
+                    systemKind={systemKind}
+                    canWrite={canWrite}
+                  />
+                ) : null}
                 <p className="text-xs text-muted-foreground">
                   Edit limits, network policy, and entrypoint from the skill detail page settings.
                 </p>
@@ -403,10 +414,21 @@ function SpecSummary({ spec }: { spec: NonNullable<ReturnType<typeof useSkillExe
   )
 }
 
-function SpecDetail({ spec }: { spec: NonNullable<ReturnType<typeof useSkillExecutionSpec>["data"]> }) {
+function SpecDetail({
+  spec,
+  skillSlug,
+  systemKind,
+  canWrite,
+}: {
+  spec: NonNullable<ReturnType<typeof useSkillExecutionSpec>["data"]>
+  skillSlug: string
+  systemKind?: SkillSystemKind
+  canWrite: boolean
+}) {
   return (
     <div className="space-y-3">
       <SpecSummary spec={spec} />
+      <SecretsPanel skillSlug={skillSlug} systemKind={systemKind} canWrite={canWrite} />
       <div className="rounded-lg border bg-card p-3">
         <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Input schema
@@ -423,6 +445,127 @@ function SpecDetail({ spec }: { spec: NonNullable<ReturnType<typeof useSkillExec
           {JSON.stringify(spec.output_schema ?? {}, null, 2)}
         </pre>
       </div>
+    </div>
+  )
+}
+
+function SecretsPanel({
+  skillSlug,
+  systemKind,
+  canWrite,
+}: {
+  skillSlug: string
+  systemKind?: SkillSystemKind
+  canWrite: boolean
+}) {
+  const secretsQuery = useSkillSecrets(skillSlug, systemKind)
+  const upsertSecret = useUpsertSkillSecret(skillSlug, systemKind)
+  const deleteSecret = useDeleteSkillSecret(skillSlug, systemKind)
+  const [drafts, setDrafts] = React.useState<Record<string, string>>({})
+
+  const secrets = secretsQuery.data?.items ?? []
+
+  async function handleSet(name: string) {
+    const value = drafts[name] ?? ""
+    if (!value) {
+      toast.error("Enter a value before saving the secret.")
+      return
+    }
+    try {
+      await upsertSecret.mutateAsync({ name, value })
+      setDrafts((current) => ({ ...current, [name]: "" }))
+      toast.success(`${name} saved`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save secret")
+    }
+  }
+
+  async function handleDelete(name: string) {
+    try {
+      await deleteSecret.mutateAsync(name)
+      setDrafts((current) => ({ ...current, [name]: "" }))
+      toast.success(`${name} removed`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not remove secret")
+    }
+  }
+
+  return (
+    <div className="rounded-lg border bg-card p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Secrets
+        </h4>
+        <Badge variant="secondary">{secrets.length}</Badge>
+      </div>
+      {secretsQuery.isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading declared secrets...</p>
+      ) : secrets.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          This executable skill does not declare any secrets.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {secrets.map((secret) => (
+            <div key={secret.name} className="space-y-2 rounded border bg-muted/20 p-2">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="font-mono text-xs font-medium">{secret.name}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {secret.scope} scope · {secret.required ? "required" : "optional"}
+                  </p>
+                  {secret.description ? (
+                    <p className="mt-1 text-[11px] text-muted-foreground">{secret.description}</p>
+                  ) : null}
+                </div>
+                <Badge variant={secret.is_set ? "default" : "outline"}>
+                  {secret.is_set ? "Set" : "Missing"}
+                </Badge>
+              </div>
+              {secret.last_set_at ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Last set {new Date(secret.last_set_at).toLocaleString()}
+                  {secret.last_set_by?.email ? ` by ${secret.last_set_by.email}` : ""}
+                </p>
+              ) : null}
+              {canWrite ? (
+                <div className="flex gap-2">
+                  <Input
+                    type="password"
+                    autoComplete="off"
+                    placeholder={secret.is_set ? "Enter new value to rotate" : "Enter value"}
+                    value={drafts[secret.name] ?? ""}
+                    onChange={(event) =>
+                      setDrafts((current) => ({
+                        ...current,
+                        [secret.name]: event.target.value,
+                      }))
+                    }
+                    className="h-8 text-xs"
+                  />
+                  <Button
+                    size="sm"
+                    disabled={upsertSecret.isPending}
+                    onClick={() => void handleSet(secret.name)}
+                  >
+                    Save
+                  </Button>
+                  {secret.is_set ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={deleteSecret.isPending}
+                      onClick={() => void handleDelete(secret.name)}
+                    >
+                      Delete
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

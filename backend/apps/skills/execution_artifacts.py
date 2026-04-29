@@ -84,6 +84,14 @@ def build_execution_manifest(run: SkillExecutionRun) -> dict:
         "entrypoint_path": spec.entrypoint_path,
         "input_schema": spec.input_schema or {},
         "output_schema": spec.output_schema or {},
+        "secret_refs": [
+            {
+                "name": ref.name,
+                "scope": ref.scope,
+                "required": bool(ref.required),
+            }
+            for ref in spec.secret_refs.all().order_by("name")
+        ],
         "network": {
             "policy": spec.network_policy,
             "allowed": spec.allowed_egress or [],

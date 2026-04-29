@@ -5,6 +5,9 @@ from .models import (
     SkillExecutionQuotaCounter,
     SkillExecutionRun,
     SkillExecutionSpec,
+    SkillSecretAccessLog,
+    SkillSecretDeclaration,
+    SkillSecretValue,
     SkillVersion,
     VersionFile,
 )
@@ -59,3 +62,27 @@ class SkillExecutionQuotaCounterAdmin(admin.ModelAdmin):
     list_display = ("workspace", "skill", "day", "run_count")
     list_filter = ("day",)
     raw_id_fields = ("workspace", "skill")
+
+
+@admin.register(SkillSecretDeclaration)
+class SkillSecretDeclarationAdmin(admin.ModelAdmin):
+    list_display = ("spec", "name", "scope", "required", "created_at")
+    list_filter = ("scope", "required")
+    search_fields = ("name", "spec__skill__slug")
+    raw_id_fields = ("spec",)
+
+
+@admin.register(SkillSecretValue)
+class SkillSecretValueAdmin(admin.ModelAdmin):
+    list_display = ("skill", "workspace", "name", "scope", "last_set_by", "updated_at")
+    list_filter = ("scope",)
+    search_fields = ("name", "skill__slug")
+    raw_id_fields = ("skill", "workspace", "last_set_by")
+
+
+@admin.register(SkillSecretAccessLog)
+class SkillSecretAccessLogAdmin(admin.ModelAdmin):
+    list_display = ("run", "skill", "workspace", "name", "granted", "failure_reason", "created_at")
+    list_filter = ("granted",)
+    search_fields = ("name", "skill__slug")
+    raw_id_fields = ("run", "skill", "workspace")

@@ -52,10 +52,12 @@ from apps.skills.execution import (
     dispatch_execution_run,
     enforce_skill_concurrency,
     enforce_skill_quota,
+    fetch_run_secret_values,
     requires_execution_approval,
     run_expiry,
     validate_callback_token,
     validate_execution_inputs,
+    validate_secret_fetch_token,
 )
 from apps.skills.files import (
     compute_file_delta,
@@ -69,9 +71,12 @@ from apps.skills.models import (
     Skill,
     SkillExecutionRun,
     SkillExecutionSpec,
+    SkillSecretDeclaration,
+    SkillSecretValue,
     SkillVersion,
     VersionFile,
 )
+from apps.skills.secret_crypto import encrypt_secret_value
 
 logger = logging.getLogger(__name__)
 
@@ -296,6 +301,20 @@ class ExecutionNetworkOut(Schema):
     allowed: list[str]
 
 
+class SecretRefOut(Schema):
+    name: str
+    scope: str
+    required: bool
+    description: str = ""
+
+
+class SecretRefIn(Schema):
+    name: str = Field(pattern=r"^[A-Z][A-Z0-9_]{0,63}$", max_length=64)
+    scope: str = Field(default="workspace", pattern=r"^(workspace|user|platform)$")
+    required: bool = True
+    description: str = Field(default="", max_length=500)
+
+
 class SkillExecutionSpecOut(Schema):
     enabled: bool
     version_number: int | None
@@ -305,6 +324,7 @@ class SkillExecutionSpecOut(Schema):
     input_schema: dict
     output_schema: dict
     secrets_scope: str
+    secret_refs: list[SecretRefOut]
     network: ExecutionNetworkOut
     limits: ExecutionLimitsOut
     updated_at: str | None
@@ -330,9 +350,33 @@ class UpdateSkillExecutionSpecIn(Schema):
     entrypoint_path: str = Field(default="run.py", pattern=r"^[a-zA-Z0-9_\-./]+$", max_length=500)
     input_schema: dict = {}
     output_schema: dict = {}
-    secrets_scope: str = Field(default="department", pattern=r"^department$")
+    secrets_scope: str = Field(default="workspace", pattern=r"^(workspace|user|platform)$")
+    secret_refs: list[SecretRefIn] = []
     network: ExecutionNetworkIn = ExecutionNetworkIn()
     limits: ExecutionLimitsIn = ExecutionLimitsIn()
+
+
+class SkillSecretStatusOut(Schema):
+    name: str
+    scope: str
+    required: bool
+    description: str
+    is_set: bool
+    last_set_at: str | None
+    last_set_by: UserBriefOut | None
+
+
+class SkillSecretListOut(Schema):
+    items: list[SkillSecretStatusOut]
+    count: int
+
+
+class UpsertSkillSecretValueIn(Schema):
+    value: str = Field(min_length=1, max_length=10000)
+
+
+class ExecutionSecretsFetchOut(Schema):
+    values: dict[str, str]
 
 
 class ExecuteSkillIn(Schema):
@@ -916,7 +960,8 @@ def _execution_spec_out(skill: Skill) -> dict:
             "entrypoint_path": "run.py",
             "input_schema": {},
             "output_schema": {},
-            "secrets_scope": "department",
+            "secrets_scope": "workspace",
+            "secret_refs": [],
             "network": {"policy": "egress_allowlist", "allowed": []},
             "limits": {
                 "timeout_seconds": 30,
@@ -937,6 +982,15 @@ def _execution_spec_out(skill: Skill) -> dict:
         "input_schema": spec.input_schema,
         "output_schema": spec.output_schema,
         "secrets_scope": spec.secrets_scope,
+        "secret_refs": [
+            {
+                "name": ref.name,
+                "scope": ref.scope,
+                "required": bool(ref.required),
+                "description": ref.description or "",
+            }
+            for ref in spec.secret_refs.all().order_by("name")
+        ],
         "network": {
             "policy": spec.network_policy,
             "allowed": spec.allowed_egress,
@@ -1010,6 +1064,70 @@ def _execution_run_out(run: SkillExecutionRun) -> dict:
         "caller_label": _execution_run_caller_label(run),
         "cancellable": run.status in EXECUTION_CANCELLABLE_STATUSES,
     }
+
+
+def _sync_secret_refs(spec: SkillExecutionSpec, refs: list[SecretRefIn]):
+    desired: dict[str, SecretRefIn] = {}
+    for ref in refs:
+        desired[ref.name] = ref
+
+    existing = {row.name: row for row in spec.secret_refs.all()}
+    for name, row in existing.items():
+        incoming = desired.get(name)
+        if incoming is None:
+            row.delete()
+            continue
+        changed = (
+            row.scope != incoming.scope
+            or row.required != incoming.required
+            or row.description != incoming.description
+        )
+        if changed:
+            row.scope = incoming.scope
+            row.required = incoming.required
+            row.description = incoming.description
+            row.save(update_fields=["scope", "required", "description", "updated_at"])
+
+    for name, incoming in desired.items():
+        if name in existing:
+            continue
+        SkillSecretDeclaration.objects.create(
+            spec=spec,
+            name=incoming.name,
+            scope=incoming.scope,
+            required=incoming.required,
+            description=incoming.description,
+        )
+
+
+def _skill_secret_status_items(skill: Skill) -> list[dict]:
+    try:
+        spec = skill.execution_spec
+    except SkillExecutionSpec.DoesNotExist:
+        return []
+
+    workspace = skill.department.team.workspace
+    values = {
+        (row.name, row.scope): row
+        for row in SkillSecretValue.objects.select_related("last_set_by")
+        .filter(skill=skill, workspace=workspace)
+        .order_by("name")
+    }
+    items = []
+    for ref in spec.secret_refs.all().order_by("name"):
+        row = values.get((ref.name, ref.scope))
+        items.append(
+            {
+                "name": ref.name,
+                "scope": ref.scope,
+                "required": bool(ref.required),
+                "description": ref.description or "",
+                "is_set": row is not None,
+                "last_set_at": row.updated_at.isoformat() if row else None,
+                "last_set_by": _user_brief(row.last_set_by) if row else None,
+            }
+        )
+    return items
 
 
 def _set_skill_shared_with(skill, dept_ids, workspace):
@@ -1648,6 +1766,9 @@ def update_skill_execution_spec(
         payload.network.allowed, list
     ):
         raise HttpError(400, "Network allowlist must be a list")
+    secret_ref_names = [ref.name for ref in payload.secret_refs]
+    if len(secret_ref_names) != len(set(secret_ref_names)):
+        raise HttpError(400, "Secret names must be unique per skill")
 
     spec, _created = SkillExecutionSpec.objects.get_or_create(skill=skill)
     spec.version = skill.current_version
@@ -1665,6 +1786,7 @@ def update_skill_execution_spec(
     spec.max_runs_per_day = payload.limits.max_runs_per_day
     spec.max_concurrent_runs = payload.limits.max_concurrent_runs
     spec.save()
+    _sync_secret_refs(spec, payload.secret_refs)
 
     skill.execution_enabled = payload.enabled
     skill.save(update_fields=["execution_enabled", "updated_at"])
@@ -1737,6 +1859,97 @@ def execute_skill(
     return Status(201, _execution_run_out(run))
 
 
+@router.get(
+    "/skills/{slug}/secrets",
+    response=SkillSecretListOut,
+    auth=api_or_session,
+    throttle=[ReadThrottle()],
+)
+@require_role(RoleChoices.ADMIN)
+def list_skill_secrets(request, slug: str, system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
+    check_skill_write(request, skill)
+    items = _skill_secret_status_items(skill)
+    return {"items": items, "count": len(items)}
+
+
+@router.put(
+    "/skills/{slug}/secrets/{name}",
+    response=SkillSecretStatusOut,
+    auth=api_or_session,
+    throttle=[MutationThrottle()],
+)
+@require_role(RoleChoices.ADMIN)
+def upsert_skill_secret(
+    request,
+    slug: str,
+    name: str,
+    payload: UpsertSkillSecretValueIn,
+    system_kind: str | None = "",
+):
+    skill = _get_skill(request, slug, system_kind=system_kind)
+    check_skill_write(request, skill)
+    try:
+        spec = skill.execution_spec
+    except SkillExecutionSpec.DoesNotExist:
+        raise HttpError(400, "Skill has no execution specification")
+
+    try:
+        ref = spec.secret_refs.get(name=name)
+    except SkillSecretDeclaration.DoesNotExist:
+        raise HttpError(404, "Secret declaration not found on this skill")
+
+    encrypted = encrypt_secret_value(payload.value)
+    row, _created = SkillSecretValue.objects.update_or_create(
+        skill=skill,
+        workspace=skill.department.team.workspace,
+        name=ref.name,
+        scope=ref.scope,
+        defaults={
+            "wrapped_dek": encrypted.wrapped_dek,
+            "ciphertext": encrypted.ciphertext,
+            "kms_key_version": encrypted.kms_key_version,
+            "last_set_by": request.user if request.user.is_authenticated else None,
+        },
+    )
+    return {
+        "name": ref.name,
+        "scope": ref.scope,
+        "required": bool(ref.required),
+        "description": ref.description or "",
+        "is_set": True,
+        "last_set_at": row.updated_at.isoformat(),
+        "last_set_by": _user_brief(row.last_set_by),
+    }
+
+
+@router.delete(
+    "/skills/{slug}/secrets/{name}",
+    auth=api_or_session,
+    throttle=[MutationThrottle()],
+)
+@require_role(RoleChoices.ADMIN)
+def delete_skill_secret(request, slug: str, name: str, system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
+    check_skill_write(request, skill)
+    try:
+        spec = skill.execution_spec
+    except SkillExecutionSpec.DoesNotExist:
+        raise HttpError(400, "Skill has no execution specification")
+    try:
+        ref = spec.secret_refs.get(name=name)
+    except SkillSecretDeclaration.DoesNotExist:
+        raise HttpError(404, "Secret declaration not found on this skill")
+    workspace = skill.department.team.workspace
+    SkillSecretValue.objects.filter(
+        skill=skill,
+        workspace=workspace,
+        name=ref.name,
+        scope=ref.scope,
+    ).delete()
+    return {"ok": True}
+
+
 @router.post(
     "/skill-executions/{run_id}/callback",
     response=SkillExecutionRunOut,
@@ -1769,6 +1982,49 @@ def callback_skill_execution_run(request, run_id: str, payload: SkillExecutionCa
         pk=run.pk
     )
     return _execution_run_out(run)
+
+
+@router.post(
+    "/skill-executions/{run_id}/secrets",
+    response=ExecutionSecretsFetchOut,
+    auth=None,
+    throttle=[],
+)
+def fetch_skill_execution_secrets(request, run_id: str):
+    from django.db import transaction
+
+    auth_header = request.headers.get("authorization", "")
+    token = (
+        auth_header[len("Bearer ") :].strip() if auth_header.lower().startswith("bearer ") else ""
+    )
+    allowed_names = validate_secret_fetch_token(token, run_id)
+    if allowed_names is None:
+        raise HttpError(401, "Invalid execution secret token")
+
+    with transaction.atomic():
+        try:
+            run = (
+                SkillExecutionRun.objects.select_for_update()
+                .select_related("skill", "spec", "workspace")
+                .get(id=run_id)
+            )
+        except SkillExecutionRun.DoesNotExist:
+            raise HttpError(404, "Execution run not found")
+
+        if run.secrets_fetched_at is not None:
+            raise HttpError(409, "Execution secrets were already fetched")
+        if run.status in {
+            SkillExecutionRun.StatusChoices.SUCCEEDED,
+            SkillExecutionRun.StatusChoices.FAILED,
+            SkillExecutionRun.StatusChoices.TIMEOUT,
+            SkillExecutionRun.StatusChoices.CANCELLED,
+        }:
+            raise HttpError(409, "Execution run is already terminal")
+
+        values = fetch_run_secret_values(run, allowed_names=allowed_names)
+        run.secrets_fetched_at = timezone.now()
+        run.save(update_fields=["secrets_fetched_at", "updated_at"])
+    return {"values": values}
 
 
 @router.get(
@@ -2072,16 +2328,11 @@ def stream_skill_file_ai_edit(
     except SkillVersion.DoesNotExist:
         raise HttpError(404, "Version not found")
 
-    file_qs = VersionFile.objects.filter(
-        skill=skill,
-        version=version,
-        path=path,
-        is_deleted=False,
-    )
-    file = file_qs.first()
+    files = resolve_files(skill.id, version.version_number)
+    file = files.get(path)
     if file is None:
         raise HttpError(404, "File not found in this version")
-    if not is_text_file(file.file_type):
+    if not is_text_file(file):
         raise HttpError(400, "AI edit only supports text files")
 
     file_content = file_bytes(file).decode("utf-8", errors="replace")

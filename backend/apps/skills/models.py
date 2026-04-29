@@ -1,4 +1,5 @@
 from django.contrib.postgres.indexes import GinIndex
+from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import Q
 from pgvector.django import HnswIndex, VectorField
@@ -186,6 +187,11 @@ class SkillExecutionSpec(BaseModel):
         EGRESS_ALLOWLIST = "egress_allowlist", "Egress allowlist"
         NONE = "none", "No network"
 
+    class SecretScopeChoices(models.TextChoices):
+        WORKSPACE = "workspace", "Workspace"
+        USER = "user", "User"
+        PLATFORM = "platform", "Platform"
+
     skill = models.OneToOneField(
         Skill,
         on_delete=models.CASCADE,
@@ -211,7 +217,11 @@ class SkillExecutionSpec(BaseModel):
     entrypoint_path = models.CharField(max_length=500, default="run.py")
     input_schema = models.JSONField(default=dict, blank=True)
     output_schema = models.JSONField(default=dict, blank=True)
-    secrets_scope = models.CharField(max_length=50, default="department")
+    secrets_scope = models.CharField(
+        max_length=50,
+        choices=SecretScopeChoices.choices,
+        default=SecretScopeChoices.WORKSPACE,
+    )
     network_policy = models.CharField(
         max_length=50,
         choices=NetworkPolicyChoices.choices,
@@ -316,6 +326,7 @@ class SkillExecutionRun(BaseModel):
     approved_at = models.DateTimeField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     finished_at = models.DateTimeField(null=True, blank=True)
+    secrets_fetched_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     resource_usage = models.JSONField(default=dict, blank=True)
 
@@ -363,6 +374,132 @@ class SkillExecutionQuotaCounter(BaseModel):
 
     def __str__(self):
         return f"{self.skill.slug} executions on {self.day}: {self.run_count}"
+
+
+ENV_NAME_RE = RegexValidator(
+    regex=r"^[A-Z][A-Z0-9_]{0,63}$",
+    message="Secret names must look like environment variable names (e.g. OPENAI_API_KEY).",
+)
+
+
+class SkillSecretDeclaration(BaseModel):
+    class ScopeChoices(models.TextChoices):
+        WORKSPACE = "workspace", "Workspace"
+        USER = "user", "User"
+        PLATFORM = "platform", "Platform"
+
+    spec = models.ForeignKey(
+        SkillExecutionSpec,
+        on_delete=models.CASCADE,
+        related_name="secret_refs",
+    )
+    name = models.CharField(max_length=64, validators=[ENV_NAME_RE])
+    scope = models.CharField(
+        max_length=20,
+        choices=ScopeChoices.choices,
+        default=ScopeChoices.WORKSPACE,
+    )
+    required = models.BooleanField(default=True)
+    description = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "skill_secret_declaration"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["spec", "name"],
+                name="uq_skill_secret_decl_spec_name",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["spec"], name="idx_secret_decl_spec"),
+            models.Index(fields=["name"], name="idx_secret_decl_name"),
+        ]
+
+    def __str__(self):
+        return f"{self.spec.skill.slug} secret {self.name}"
+
+
+class SkillSecretValue(BaseModel):
+    class ScopeChoices(models.TextChoices):
+        WORKSPACE = "workspace", "Workspace"
+        USER = "user", "User"
+        PLATFORM = "platform", "Platform"
+
+    skill = models.ForeignKey(
+        Skill,
+        on_delete=models.CASCADE,
+        related_name="secret_values",
+    )
+    workspace = models.ForeignKey(
+        "orgs.Workspace",
+        on_delete=models.CASCADE,
+        related_name="skill_secret_values",
+    )
+    name = models.CharField(max_length=64, validators=[ENV_NAME_RE])
+    scope = models.CharField(
+        max_length=20,
+        choices=ScopeChoices.choices,
+        default=ScopeChoices.WORKSPACE,
+    )
+    wrapped_dek = models.BinaryField(default=b"")
+    ciphertext = models.BinaryField(default=b"")
+    kms_key_version = models.CharField(max_length=255, blank=True, default="")
+    last_set_by = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="set_skill_secret_values",
+    )
+
+    class Meta:
+        db_table = "skill_secret_value"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["skill", "workspace", "name", "scope"],
+                name="uq_skill_secret_value_scope",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["skill", "workspace"], name="idx_secret_value_skill_ws"),
+            models.Index(fields=["name"], name="idx_secret_value_name"),
+        ]
+
+    def __str__(self):
+        return f"{self.skill.slug}/{self.workspace_id}/{self.name}"
+
+
+class SkillSecretAccessLog(BaseModel):
+    run = models.ForeignKey(
+        SkillExecutionRun,
+        on_delete=models.CASCADE,
+        related_name="secret_access_logs",
+    )
+    skill = models.ForeignKey(
+        Skill,
+        on_delete=models.CASCADE,
+        related_name="secret_access_logs",
+    )
+    workspace = models.ForeignKey(
+        "orgs.Workspace",
+        on_delete=models.CASCADE,
+        related_name="skill_secret_access_logs",
+    )
+    name = models.CharField(max_length=64, validators=[ENV_NAME_RE])
+    granted = models.BooleanField(default=False)
+    failure_reason = models.CharField(max_length=64, blank=True, default="")
+
+    class Meta:
+        db_table = "skill_secret_access_log"
+        indexes = [
+            models.Index(fields=["run"], name="idx_secret_log_run"),
+            models.Index(fields=["workspace", "-created_at"], name="idx_secret_log_ws_created"),
+            models.Index(fields=["skill", "-created_at"], name="idx_secret_log_skill_created"),
+        ]
+
+    def __str__(self):
+        status = "granted" if self.granted else "denied"
+        return f"{self.run_id}/{self.name}/{status}"
 
 
 class FileTypeChoices(models.TextChoices):
