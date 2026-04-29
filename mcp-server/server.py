@@ -10,13 +10,6 @@ import time
 from pathlib import Path
 
 import uvicorn
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import ToolAnnotations
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
-
 from api_client import KoinoflowAPIClient, KoinoflowAPIError
 from auth import (
     get_authorization_server_metadata,
@@ -33,6 +26,12 @@ from config import (
     SERVER_HOST,
     SERVER_PORT,
 )
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
+from mcp.types import ToolAnnotations
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
 
 # ── Per-request auth context (set by middleware) ─────────────────────────
 
@@ -661,6 +660,87 @@ async def list_skills(
     if offset + len(items) < total:
         header += f" (use offset={offset + len(items)} to fetch more)"
     return header + ":\n\n" + "\n".join(lines)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(
+        title="Execute skill",
+        readOnlyHint=False,
+        destructiveHint=False,
+    ),
+)
+async def execute_skill(
+    slug: str,
+    inputs: dict,
+    ctx: Context,
+    approved: bool = False,
+) -> str:
+    """Execute an enabled Koinoflow skill in the sandboxed execution plane.
+
+    The skill must already be published, execution-enabled in Koinoflow, and
+    available to the current principal. Agents can execute only skills deployed
+    to them. If the skill's risk metadata requires approval and approved=false,
+    the run is created in pending_approval status instead of dispatched.
+
+    Args:
+        slug: The process slug (e.g., "look-up-customer")
+        inputs: JSON object matching the skill's execution input schema
+        approved: Set true only after explicit user approval for risky skills
+    """
+    client = _get_client()
+    if not client:
+        return _NO_AUTH_MSG
+    try:
+        data = await client.execute_skill(slug, inputs=inputs, approved=approved)
+    except KoinoflowAPIError as e:
+        return f"Error executing skill: {e}"
+
+    if data.get("status") == "pending_approval":
+        return json.dumps(
+            {
+                **data,
+                "approval_instruction": (
+                    "This skill requires explicit user approval. Ask the user "
+                    "to approve this exact execution, then call execute_skill "
+                    "again with approved=true."
+                ),
+            },
+            indent=2,
+        )
+    if data.get("status") in {"queued", "running"}:
+        data = {
+            **data,
+            "polling_instruction": (
+                "Execution is running asynchronously. Call get_run with this run_id "
+                "until status is succeeded, failed, timeout, or cancelled."
+            ),
+        }
+
+    asyncio.create_task(
+        client.log_usage(
+            skill_id=data.get("skill_id", ""),
+            version_number=data.get("version_number", 0) or 0,
+            client_id=_mcp_client_id(ctx),
+            client_type=_mcp_client_type(ctx),
+            tool_name="execute_skill",
+        )
+    )
+    return json.dumps(data, indent=2)
+
+
+@mcp.tool(
+    annotations=ToolAnnotations(title="Get skill execution run", readOnlyHint=True),
+)
+async def get_run(run_id: str) -> str:
+    """Fetch the current status and output for a sandboxed skill execution."""
+    client = _get_client()
+    if not client:
+        return _NO_AUTH_MSG
+    try:
+        data = await client.get_run(run_id)
+    except KoinoflowAPIError as e:
+        return f"Error fetching skill execution run: {e}"
+    return json.dumps(data, indent=2)
 
 
 @mcp.tool(

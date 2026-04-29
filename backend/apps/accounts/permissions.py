@@ -187,6 +187,11 @@ def apply_oauth_connection_scope(request, qs):
     ).distinct()
 
 
+def apply_membership_scope(request, qs):
+    """Public wrapper for role-based human skill visibility checks."""
+    return _apply_membership_scope(request, qs)
+
+
 def _apply_membership_scope(request, qs):
     """Apply role-based filtering for OAuth users based on their membership."""
     from django.db.models import Q

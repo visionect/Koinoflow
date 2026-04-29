@@ -1,14 +1,12 @@
 import pytest
-from django.test import Client
-
 from apps.orgs.enums import RoleChoices
+from django.test import Client
 
 
 @pytest.fixture
 def api_client():
-    from ninja.testing import TestClient
-
     from config.api import api
+    from ninja.testing import TestClient
 
     return TestClient(api)
 

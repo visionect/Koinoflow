@@ -1,5 +1,6 @@
-from apps.usage.enums import ClientType
 from tasks.registry import register_task
+
+from apps.usage.enums import ClientType
 
 
 @register_task("log_usage_event")

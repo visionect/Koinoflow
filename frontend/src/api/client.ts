@@ -46,6 +46,8 @@ import type {
   SkillDetail,
   ProcessListFilters,
   SkillUsageSummary,
+  SkillExecutionRun,
+  SkillExecutionSpec,
   SkillVersion,
   SkillVersionBrief,
   PromoteCandidateInput,
@@ -55,6 +57,7 @@ import type {
   UpdateDepartmentInput,
   UpdateAgentInput,
   UpdateSkillInput,
+  UpdateSkillExecutionSpecInput,
   UpdateTeamInput,
   UpdateVersionSummaryInput,
   UpsertSettingsInput,
@@ -233,6 +236,11 @@ export const queryKeys = {
       ["skills", "files", slug, versionNumber, path, skillScopeKey(systemKind)] as const,
     fileDiff: (slug: string, versionNumber: number, systemKind?: SkillSystemKind) =>
       ["skills", "files", slug, versionNumber, "diff", skillScopeKey(systemKind)] as const,
+    executionSpec: (slug: string, systemKind?: SkillSystemKind) =>
+      ["skills", "execution", slug, skillScopeKey(systemKind)] as const,
+    executionRuns: (slug: string, systemKind?: SkillSystemKind) =>
+      ["skills", "execution-runs", slug, skillScopeKey(systemKind)] as const,
+    executionRun: (runId: string) => ["skills", "execution-run", runId] as const,
   },
   settings: {
     effective: (teamId?: string, departmentId?: string) =>
@@ -655,6 +663,66 @@ export function useUpdateSkill(slug: string, systemKind?: SkillSystemKind) {
         queryClient.invalidateQueries({ queryKey: ["skills"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug, systemKind) }),
       ])
+    },
+  })
+}
+
+export function useSkillExecutionSpec(slug: string, systemKind?: SkillSystemKind) {
+  return useQuery({
+    queryKey: queryKeys.skills.executionSpec(slug, systemKind),
+    queryFn: () =>
+      apiFetch<SkillExecutionSpec>(`/skills/${slug}/execution${buildSkillScopeQuery(systemKind)}`),
+    enabled: Boolean(slug),
+  })
+}
+
+export function useUpdateSkillExecutionSpec(slug: string, systemKind?: SkillSystemKind) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: UpdateSkillExecutionSpecInput) =>
+      apiFetch<SkillExecutionSpec>(`/skills/${slug}/execution${buildSkillScopeQuery(systemKind)}`, {
+        method: "PATCH",
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.executionSpec(slug, systemKind) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.skills.detail(slug, systemKind) }),
+        queryClient.invalidateQueries({ queryKey: ["skills"] }),
+      ])
+    },
+  })
+}
+
+export function useExecuteSkill(slug: string, systemKind?: SkillSystemKind) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: { inputs: Record<string, unknown>; approved?: boolean }) =>
+      apiFetch<SkillExecutionRun>(`/skills/${slug}/execute${buildSkillScopeQuery(systemKind)}`, {
+        method: "POST",
+        body: JSON.stringify({ inputs: payload.inputs, approved: payload.approved ?? false }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.skills.executionRuns(slug, systemKind),
+      })
+    },
+  })
+}
+
+export function useSkillExecutionRuns(slug: string, systemKind?: SkillSystemKind) {
+  return useQuery({
+    queryKey: queryKeys.skills.executionRuns(slug, systemKind),
+    queryFn: () =>
+      apiFetch<PaginatedResponse<SkillExecutionRun>>(
+        `/skills/${slug}/executions${buildSkillScopeQuery(systemKind)}`,
+      ),
+    enabled: Boolean(slug),
+    refetchInterval: (query) => {
+      const latest = query.state.data?.items?.[0]
+      return latest?.status === "queued" || latest?.status === "running" ? 2000 : false
     },
   })
 }

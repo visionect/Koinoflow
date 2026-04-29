@@ -1,7 +1,3 @@
-from django.contrib import admin
-from django.urls import include, path
-from oauth2_provider.views import TokenView
-
 from apps.accounts.introspect import introspect_token
 from apps.accounts.oauth_views import (
     KoinoflowAuthorizationView,
@@ -9,6 +5,9 @@ from apps.accounts.oauth_views import (
     dynamic_client_registration,
 )
 from apps.common.internal_tasks import run_scheduled_task, run_task
+from django.contrib import admin
+from django.urls import include, path
+from oauth2_provider.views import TokenView
 
 from .api import api
 

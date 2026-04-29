@@ -23,6 +23,7 @@ from pgvector.django import CosineDistance
 from apps.accounts.auth import api_or_session
 from apps.accounts.permissions import (
     apply_api_key_scope,
+    apply_membership_scope,
     apply_oauth_connection_scope,
     check_skill_write,
     require_role,
@@ -45,6 +46,17 @@ from apps.skills.discovery import (
     normalize_metadata as normalize_discovery_metadata,
 )
 from apps.skills.enums import StatusChoices, VisibilityChoices
+from apps.skills.execution import (
+    apply_execution_callback,
+    canonical_input_hash,
+    dispatch_execution_run,
+    enforce_skill_concurrency,
+    enforce_skill_quota,
+    requires_execution_approval,
+    run_expiry,
+    validate_callback_token,
+    validate_execution_inputs,
+)
 from apps.skills.files import (
     compute_file_delta,
     detect_file_type,
@@ -53,7 +65,13 @@ from apps.skills.files import (
     resolve_file_list,
     resolve_files,
 )
-from apps.skills.models import Skill, SkillVersion, VersionFile
+from apps.skills.models import (
+    Skill,
+    SkillExecutionRun,
+    SkillExecutionSpec,
+    SkillVersion,
+    VersionFile,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -235,6 +253,7 @@ class SkillOut(Schema):
     risk_level: RiskLevel | None
     retrieval_keywords: list[str]
     requires_human_approval: bool
+    execution_enabled: bool
     discovery_embedding_status: DiscoveryEmbeddingStatus
     created_at: str
     updated_at: str
@@ -258,9 +277,101 @@ class SkillDetailOut(Schema):
     current_version: SkillVersionOut | None
     last_reviewed_at: str | None
     needs_audit: bool
+    execution_enabled: bool
     discovery_embedding_status: DiscoveryEmbeddingStatus
     created_at: str
     updated_at: str
+
+
+class ExecutionLimitsOut(Schema):
+    timeout_seconds: int
+    memory_mb: int
+    max_output_bytes_inline: int
+    max_runs_per_day: int
+    max_concurrent_runs: int
+
+
+class ExecutionNetworkOut(Schema):
+    policy: str
+    allowed: list[str]
+
+
+class SkillExecutionSpecOut(Schema):
+    enabled: bool
+    version_number: int | None
+    runtime: str
+    latency_class: str
+    entrypoint_path: str
+    input_schema: dict
+    output_schema: dict
+    secrets_scope: str
+    network: ExecutionNetworkOut
+    limits: ExecutionLimitsOut
+    updated_at: str | None
+
+
+class ExecutionLimitsIn(Schema):
+    timeout_seconds: int = Field(default=30, ge=1, le=900)
+    memory_mb: int = Field(default=512, ge=128, le=4096)
+    max_output_bytes_inline: int = Field(default=32768, ge=1024, le=262144)
+    max_runs_per_day: int = Field(default=100, ge=1, le=10000)
+    max_concurrent_runs: int = Field(default=1, ge=1, le=100)
+
+
+class ExecutionNetworkIn(Schema):
+    policy: str = Field(default="egress_allowlist", pattern=r"^(egress_allowlist|none)$")
+    allowed: list[str] = []
+
+
+class UpdateSkillExecutionSpecIn(Schema):
+    enabled: bool
+    runtime: str = Field(default="python", pattern=r"^python$")
+    latency_class: str = Field(default="standard", pattern=r"^(interactive|standard|async)$")
+    entrypoint_path: str = Field(default="run.py", pattern=r"^[a-zA-Z0-9_\-./]+$", max_length=500)
+    input_schema: dict = {}
+    output_schema: dict = {}
+    secrets_scope: str = Field(default="department", pattern=r"^department$")
+    network: ExecutionNetworkIn = ExecutionNetworkIn()
+    limits: ExecutionLimitsIn = ExecutionLimitsIn()
+
+
+class ExecuteSkillIn(Schema):
+    inputs: dict = {}
+    approved: bool = False
+
+
+class SkillExecutionRunOut(Schema):
+    id: str
+    skill_id: str
+    skill_slug: str
+    version_number: int | None
+    status: str
+    caller_type: str
+    requires_approval: bool
+    output: dict | None
+    output_uri: str
+    logs_uri: str
+    error_message: str
+    external_job_name: str
+    created_at: str
+    updated_at: str
+    started_at: str | None
+    finished_at: str | None
+    expires_at: str | None
+
+
+class SkillExecutionRunListOut(Schema):
+    items: list[SkillExecutionRunOut]
+    count: int
+
+
+class SkillExecutionCallbackIn(Schema):
+    status: str
+    output: dict | None = None
+    output_uri: str = ""
+    logs_uri: str = ""
+    error_message: str = ""
+    resource_usage: dict = {}
 
 
 class SkillListOut(Schema):
@@ -702,6 +813,7 @@ def _skill_out(p, audit_cache=None, shared_cache=None):
         "risk_level": cv_metadata["risk_level"],
         "retrieval_keywords": cv_metadata["retrieval_keywords"],
         "requires_human_approval": cv_metadata["requires_human_approval"],
+        "execution_enabled": p.execution_enabled,
         "discovery_embedding_status": _skill_discovery_embedding_status(p),
         "created_at": p.created_at.isoformat(),
         "updated_at": p.updated_at.isoformat(),
@@ -742,9 +854,80 @@ def _skill_detail_out(p, requester_team_id=None):
         "current_version": cv,
         "last_reviewed_at": p.last_reviewed_at.isoformat() if p.last_reviewed_at else None,
         "needs_audit": _compute_skill_needs_audit(p),
+        "execution_enabled": p.execution_enabled,
         "discovery_embedding_status": _skill_discovery_embedding_status(p),
         "created_at": p.created_at.isoformat(),
         "updated_at": p.updated_at.isoformat(),
+    }
+
+
+def _execution_spec_out(skill: Skill) -> dict:
+    try:
+        spec = skill.execution_spec
+    except SkillExecutionSpec.DoesNotExist:
+        return {
+            "enabled": skill.execution_enabled,
+            "version_number": None,
+            "runtime": "python",
+            "latency_class": "standard",
+            "entrypoint_path": "run.py",
+            "input_schema": {},
+            "output_schema": {},
+            "secrets_scope": "department",
+            "network": {"policy": "egress_allowlist", "allowed": []},
+            "limits": {
+                "timeout_seconds": 30,
+                "memory_mb": 512,
+                "max_output_bytes_inline": 32768,
+                "max_runs_per_day": 100,
+                "max_concurrent_runs": 1,
+            },
+            "updated_at": None,
+        }
+
+    return {
+        "enabled": skill.execution_enabled,
+        "version_number": spec.version.version_number if spec.version_id else None,
+        "runtime": spec.runtime,
+        "latency_class": spec.latency_class,
+        "entrypoint_path": spec.entrypoint_path,
+        "input_schema": spec.input_schema,
+        "output_schema": spec.output_schema,
+        "secrets_scope": spec.secrets_scope,
+        "network": {
+            "policy": spec.network_policy,
+            "allowed": spec.allowed_egress,
+        },
+        "limits": {
+            "timeout_seconds": spec.timeout_seconds,
+            "memory_mb": spec.memory_mb,
+            "max_output_bytes_inline": spec.max_output_bytes_inline,
+            "max_runs_per_day": spec.max_runs_per_day,
+            "max_concurrent_runs": spec.max_concurrent_runs,
+        },
+        "updated_at": spec.updated_at.isoformat(),
+    }
+
+
+def _execution_run_out(run: SkillExecutionRun) -> dict:
+    return {
+        "id": str(run.id),
+        "skill_id": str(run.skill_id),
+        "skill_slug": run.skill.slug,
+        "version_number": run.version.version_number if run.version_id else None,
+        "status": run.status,
+        "caller_type": run.caller_type,
+        "requires_approval": run.status == SkillExecutionRun.StatusChoices.PENDING_APPROVAL,
+        "output": run.output,
+        "output_uri": run.output_uri,
+        "logs_uri": run.logs_uri,
+        "error_message": run.error_message,
+        "external_job_name": run.external_job_name,
+        "created_at": run.created_at.isoformat(),
+        "updated_at": run.updated_at.isoformat(),
+        "started_at": run.started_at.isoformat() if run.started_at else None,
+        "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+        "expires_at": run.expires_at.isoformat() if run.expires_at else None,
     }
 
 
@@ -1267,6 +1450,250 @@ def update_skill(request, slug: str, payload: UpdateSkillIn, system_kind: str | 
     membership = getattr(request, "membership", None)
     team_id = membership.team_id if membership and membership.team_id else None
     return _skill_detail_out(skill, requester_team_id=team_id)
+
+
+def _check_skill_execute_access(request, skill: Skill):
+    if skill.status != StatusChoices.PUBLISHED:
+        raise HttpError(404, "Skill not found")
+
+    agent = getattr(request, "agent", None)
+    if agent is not None:
+        return
+
+    qs = Skill.objects.filter(pk=skill.pk)
+    if hasattr(request, "api_key"):
+        allowed = apply_api_key_scope(request.api_key, qs)
+    elif hasattr(request, "oauth_token"):
+        allowed = apply_oauth_connection_scope(request, qs)
+    else:
+        allowed = apply_membership_scope(request, qs)
+
+    if not allowed.exists():
+        raise HttpError(404, "Skill not found")
+
+
+def _caller_type(request) -> str:
+    if getattr(request, "agent", None) is not None:
+        return SkillExecutionRun.CallerTypeChoices.AGENT
+    if getattr(request, "api_key", None) is not None:
+        return SkillExecutionRun.CallerTypeChoices.API_KEY
+    if getattr(request, "oauth_token", None) is not None:
+        return SkillExecutionRun.CallerTypeChoices.OAUTH
+    return SkillExecutionRun.CallerTypeChoices.USER
+
+
+@router.get(
+    "/skills/{slug}/execution",
+    response=SkillExecutionSpecOut,
+    auth=api_or_session,
+    throttle=[ReadThrottle()],
+)
+def get_skill_execution_spec(request, slug: str, system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
+    _check_skill_execute_access(request, skill) if skill.execution_enabled else None
+    return _execution_spec_out(skill)
+
+
+@router.patch(
+    "/skills/{slug}/execution",
+    response=SkillExecutionSpecOut,
+    auth=api_or_session,
+    throttle=[MutationThrottle()],
+)
+@require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER, RoleChoices.MEMBER)
+def update_skill_execution_spec(
+    request,
+    slug: str,
+    payload: UpdateSkillExecutionSpecIn,
+    system_kind: str | None = "",
+):
+    skill = _get_skill(request, slug, system_kind=system_kind)
+    check_skill_write(request, skill)
+    if payload.enabled and not skill.current_version_id:
+        raise HttpError(400, "Publish or create a skill version before enabling execution")
+    if payload.network.policy == "egress_allowlist" and not isinstance(
+        payload.network.allowed, list
+    ):
+        raise HttpError(400, "Network allowlist must be a list")
+
+    spec, _created = SkillExecutionSpec.objects.get_or_create(skill=skill)
+    spec.version = skill.current_version
+    spec.runtime = payload.runtime
+    spec.latency_class = payload.latency_class
+    spec.entrypoint_path = payload.entrypoint_path
+    spec.input_schema = payload.input_schema
+    spec.output_schema = payload.output_schema
+    spec.secrets_scope = payload.secrets_scope
+    spec.network_policy = payload.network.policy
+    spec.allowed_egress = [str(host) for host in payload.network.allowed if str(host).strip()]
+    spec.timeout_seconds = payload.limits.timeout_seconds
+    spec.memory_mb = payload.limits.memory_mb
+    spec.max_output_bytes_inline = payload.limits.max_output_bytes_inline
+    spec.max_runs_per_day = payload.limits.max_runs_per_day
+    spec.max_concurrent_runs = payload.limits.max_concurrent_runs
+    spec.save()
+
+    skill.execution_enabled = payload.enabled
+    skill.save(update_fields=["execution_enabled", "updated_at"])
+    return _execution_spec_out(skill)
+
+
+@router.post(
+    "/skills/{slug}/execute",
+    response={201: SkillExecutionRunOut},
+    auth=api_or_session,
+    throttle=[MutationThrottle()],
+)
+def execute_skill(
+    request,
+    slug: str,
+    payload: ExecuteSkillIn,
+    system_kind: str | None = "",
+):
+    skill = _get_skill(request, slug, allow_draft=False, system_kind=system_kind)
+    _check_skill_execute_access(request, skill)
+    if not skill.execution_enabled:
+        raise HttpError(400, "Skill execution is not enabled")
+    if not skill.current_version_id:
+        raise HttpError(400, "Skill has no published version to execute")
+    try:
+        spec = skill.execution_spec
+    except SkillExecutionSpec.DoesNotExist:
+        raise HttpError(400, "Skill has no execution specification")
+
+    validate_execution_inputs(payload.inputs, spec)
+    approval_required = requires_execution_approval(skill)
+    status = (
+        SkillExecutionRun.StatusChoices.PENDING_APPROVAL
+        if approval_required and not payload.approved
+        else SkillExecutionRun.StatusChoices.QUEUED
+    )
+    if status != SkillExecutionRun.StatusChoices.PENDING_APPROVAL:
+        enforce_skill_concurrency(spec)
+        enforce_skill_quota(spec)
+
+    run = SkillExecutionRun.objects.create(
+        workspace=skill.department.team.workspace,
+        skill=skill,
+        version=skill.current_version,
+        spec=spec,
+        department=skill.department,
+        user=request.user
+        if getattr(request, "user", None) and request.user.is_authenticated
+        else None,
+        agent=getattr(request, "agent", None),
+        caller_type=_caller_type(request),
+        status=status,
+        inputs=payload.inputs,
+        input_hash=canonical_input_hash(payload.inputs),
+        approved_by=(
+            request.user
+            if payload.approved and getattr(request, "user", None) and request.user.is_authenticated
+            else None
+        ),
+        approved_at=timezone.now() if payload.approved else None,
+        expires_at=run_expiry(),
+    )
+
+    if status != SkillExecutionRun.StatusChoices.PENDING_APPROVAL:
+        dispatch_execution_run(run)
+
+    run = SkillExecutionRun.objects.select_related("skill", "version").get(pk=run.pk)
+    return Status(201, _execution_run_out(run))
+
+
+@router.post(
+    "/skill-executions/{run_id}/callback",
+    response=SkillExecutionRunOut,
+    auth=None,
+    throttle=[],
+)
+def callback_skill_execution_run(request, run_id: str, payload: SkillExecutionCallbackIn):
+    auth_header = request.headers.get("authorization", "")
+    token = (
+        auth_header[len("Bearer ") :].strip() if auth_header.lower().startswith("bearer ") else ""
+    )
+    if not validate_callback_token(token, run_id):
+        raise HttpError(401, "Invalid execution callback token")
+
+    try:
+        run = SkillExecutionRun.objects.select_related("skill", "version", "spec").get(id=run_id)
+    except SkillExecutionRun.DoesNotExist:
+        raise HttpError(404, "Execution run not found")
+
+    apply_execution_callback(
+        run,
+        status=payload.status,
+        output=payload.output,
+        output_uri=payload.output_uri,
+        logs_uri=payload.logs_uri,
+        error_message=payload.error_message,
+        resource_usage=payload.resource_usage,
+    )
+    run = SkillExecutionRun.objects.select_related("skill", "version").get(pk=run.pk)
+    return _execution_run_out(run)
+
+
+@router.get(
+    "/skills/{slug}/executions",
+    response=SkillExecutionRunListOut,
+    auth=api_or_session,
+    throttle=[ReadThrottle()],
+)
+def list_skill_execution_runs(
+    request,
+    slug: str,
+    limit: int = 20,
+    offset: int = 0,
+    system_kind: str | None = "",
+):
+    skill = _get_skill(request, slug, allow_draft=False, system_kind=system_kind)
+    _check_skill_execute_access(request, skill)
+    limit = min(max(limit, 1), 100)
+    offset = max(offset, 0)
+    qs = SkillExecutionRun.objects.select_related("skill", "version").filter(skill=skill)
+    agent = getattr(request, "agent", None)
+    if agent is not None:
+        qs = qs.filter(agent=agent)
+    elif getattr(request, "user", None) and request.user.is_authenticated:
+        qs = qs.filter(user=request.user)
+    count = qs.count()
+    return {
+        "items": [_execution_run_out(run) for run in qs[offset : offset + limit]],
+        "count": count,
+    }
+
+
+@router.get(
+    "/skill-executions/{run_id}",
+    response=SkillExecutionRunOut,
+    auth=api_or_session,
+    throttle=[ReadThrottle()],
+)
+def get_skill_execution_run(request, run_id: str):
+    try:
+        run = SkillExecutionRun.objects.select_related(
+            "skill__department__team",
+            "version",
+            "agent",
+            "user",
+        ).get(id=run_id, workspace=request.workspace)
+    except SkillExecutionRun.DoesNotExist:
+        raise HttpError(404, "Execution run not found")
+
+    _check_skill_execute_access(request, run.skill)
+    agent = getattr(request, "agent", None)
+    if agent is not None and run.agent_id != agent.id:
+        raise HttpError(404, "Execution run not found")
+    if (
+        agent is None
+        and getattr(request, "user", None)
+        and request.user.is_authenticated
+        and run.user_id
+        and run.user_id != request.user.id
+    ):
+        raise HttpError(404, "Execution run not found")
+    return _execution_run_out(run)
 
 
 @router.delete("/skills/{slug}", auth=api_or_session, throttle=[MutationThrottle()])

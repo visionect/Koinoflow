@@ -27,12 +27,16 @@ import {
   useDeleteSkill,
   useDepartments,
   useEffectiveSettings,
+  useExecuteSkill,
   useSkill,
+  useSkillExecutionRuns,
+  useSkillExecutionSpec,
   usePublishSkill,
   useReviewSkill,
   useSkills,
   useUnshareSkillFromMyTeam,
   useUpdateAgentSkillDeployment,
+  useUpdateSkillExecutionSpec,
   useUpdateSkill,
   useUpdateVersionSummary,
   useVersion,
@@ -100,6 +104,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 
 type SavedSnapshot = {
@@ -1321,6 +1326,12 @@ export function SkillViewPage() {
               </CardContent>
             </Card>
 
+            <ExecutionPanel
+              skillSlug={skillQuery.data.slug}
+              canWrite={canWrite}
+              systemKind={skillSystemKind}
+            />
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
@@ -1500,6 +1511,209 @@ export function SkillViewPage() {
         isAdmin={isAdmin}
       />
     </div>
+  )
+}
+
+function ExecutionPanel({
+  skillSlug,
+  canWrite,
+  systemKind,
+}: {
+  skillSlug: string
+  canWrite: boolean
+  systemKind?: SkillSystemKind
+}) {
+  const specQuery = useSkillExecutionSpec(skillSlug, systemKind)
+  const runsQuery = useSkillExecutionRuns(skillSlug, systemKind)
+  const updateSpec = useUpdateSkillExecutionSpec(skillSlug, systemKind)
+  const executeSkill = useExecuteSkill(skillSlug, systemKind)
+  const [inputsJson, setInputsJson] = React.useState("{}")
+  const [approved, setApproved] = React.useState(false)
+
+  const spec = specQuery.data
+  const isEnabled = spec?.enabled === true
+  const activeRun =
+    runsQuery.data?.items?.find((run) => run.status === "queued" || run.status === "running") ??
+    null
+
+  async function handleToggleExecution(enabled: boolean) {
+    if (!spec) return
+    try {
+      await updateSpec.mutateAsync({
+        enabled,
+        runtime: spec.runtime,
+        latency_class: spec.latency_class,
+        entrypoint_path: spec.entrypoint_path,
+        input_schema: spec.input_schema,
+        output_schema: spec.output_schema,
+        secrets_scope: spec.secrets_scope,
+        network: spec.network,
+        limits: spec.limits,
+      })
+      toast.success(enabled ? "Skill execution enabled" : "Skill execution disabled")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update execution")
+    }
+  }
+
+  async function handleExecute() {
+    let inputs: Record<string, unknown>
+    try {
+      inputs = JSON.parse(inputsJson) as Record<string, unknown>
+    } catch {
+      toast.error("Execution inputs must be valid JSON")
+      return
+    }
+
+    try {
+      const run = await executeSkill.mutateAsync({ inputs, approved })
+      if (run.status === "pending_approval") {
+        toast.info("Execution needs approval. Review the request and run again with approval.")
+      } else {
+        toast.success(`Execution ${run.status}`)
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to execute skill")
+    }
+  }
+
+  const latestRun = runsQuery.data?.items?.[0]
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle>Sandboxed execution</CardTitle>
+            <CardDescription>Run this skill outside the agent host through Koinoflow.</CardDescription>
+          </div>
+          <Badge variant={isEnabled ? "default" : "secondary"}>
+            {isEnabled ? "Executable" : "Disabled"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4 text-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="font-medium">Enable execution</p>
+            <p className="text-xs text-muted-foreground">
+              Disabled by default. Agents still need deployment access before they can execute.
+            </p>
+          </div>
+          <Switch
+            checked={isEnabled}
+            disabled={!canWrite || !spec || updateSpec.isPending}
+            onCheckedChange={(checked) => void handleToggleExecution(checked)}
+          />
+        </div>
+
+        {spec ? (
+          <div className="grid gap-2 text-xs text-muted-foreground">
+            <div className="flex justify-between gap-2">
+              <span>Runtime</span>
+              <span className="font-medium text-foreground">
+                {spec.runtime} / {spec.latency_class}
+              </span>
+            </div>
+            <div className="flex justify-between gap-2">
+              <span>Entrypoint</span>
+              <span className="font-medium text-foreground">{spec.entrypoint_path}</span>
+            </div>
+            <div className="flex justify-between gap-2">
+              <span>Daily cap</span>
+              <span className="font-medium text-foreground">
+                {spec.limits.max_runs_per_day} runs/skill
+              </span>
+            </div>
+            <div className="flex justify-between gap-2">
+              <span>Egress</span>
+              <span className="font-medium text-foreground">
+                {spec.network.policy === "none"
+                  ? "No network"
+                  : spec.network.allowed.length
+                    ? spec.network.allowed.join(", ")
+                    : "Allowlist empty"}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Loading execution settings…</p>
+        )}
+
+        <div className="space-y-2">
+          <Label htmlFor="execution-inputs">Inputs JSON</Label>
+          <Textarea
+            id="execution-inputs"
+            value={inputsJson}
+            onChange={(event) => setInputsJson(event.target.value)}
+            rows={4}
+            placeholder='{"customer_id":"cus_123"}'
+          />
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={approved}
+              onChange={(event) => setApproved(event.target.checked)}
+            />
+            I have approval for this exact execution if the skill risk policy requires it.
+          </label>
+          <Button
+            className="w-full"
+            disabled={!isEnabled || executeSkill.isPending || activeRun !== null}
+            onClick={() => void handleExecute()}
+          >
+            {executeSkill.isPending
+              ? "Starting…"
+              : activeRun
+                ? "Execution in progress"
+                : "Run sandboxed skill"}
+          </Button>
+        </div>
+
+        {latestRun ? (
+          <div className="rounded-md border p-3 text-xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium">Latest run</span>
+              <Badge
+                variant={
+                  latestRun.status === "failed" || latestRun.status === "timeout"
+                    ? "destructive"
+                    : "outline"
+                }
+              >
+                {latestRun.status}
+              </Badge>
+            </div>
+            <p className="mt-1 text-muted-foreground">{formatRelativeDate(latestRun.created_at)}</p>
+            {latestRun.status === "pending_approval" ? (
+              <p className="mt-2 text-amber-700 dark:text-amber-300">
+                This execution requires approval. Confirm the exact inputs above and run again with
+                the approval checkbox selected.
+              </p>
+            ) : null}
+            {latestRun.external_job_name ? (
+              <p className="mt-1 break-all text-muted-foreground">{latestRun.external_job_name}</p>
+            ) : null}
+            {latestRun.error_message ? (
+              <p className="mt-2 rounded bg-destructive/10 p-2 text-destructive">
+                {latestRun.error_message}
+              </p>
+            ) : null}
+            {latestRun.output_uri || latestRun.logs_uri ? (
+              <div className="mt-2 space-y-1 text-muted-foreground">
+                {latestRun.output_uri ? <p className="break-all">Output: {latestRun.output_uri}</p> : null}
+                {latestRun.logs_uri ? <p className="break-all">Logs: {latestRun.logs_uri}</p> : null}
+              </div>
+            ) : null}
+            {latestRun.output ? (
+              <pre className="mt-2 max-h-32 overflow-auto rounded bg-muted p-2">
+                {JSON.stringify(latestRun.output, null, 2)}
+              </pre>
+            ) : null}
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
   )
 }
 

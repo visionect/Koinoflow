@@ -46,6 +46,7 @@ class Skill(BaseModel):
         related_name="+",
     )
     last_reviewed_at = models.DateTimeField(null=True, blank=True)
+    execution_enabled = models.BooleanField(default=False)
 
     class Meta:
         db_table = "skill"
@@ -71,6 +72,11 @@ class Skill(BaseModel):
             models.Index(
                 fields=["-updated_at"],
                 name="idx_skill_updated_at",
+            ),
+            models.Index(
+                fields=["execution_enabled"],
+                name="idx_skill_exec_enabled",
+                condition=Q(execution_enabled=True),
             ),
             GinIndex(
                 fields=["title", "description"],
@@ -165,6 +171,198 @@ class SkillDiscoveryEmbedding(BaseModel):
 
     def __str__(self):
         return f"{self.version} discovery embedding"
+
+
+class SkillExecutionSpec(BaseModel):
+    class RuntimeChoices(models.TextChoices):
+        PYTHON = "python", "Python"
+
+    class LatencyClassChoices(models.TextChoices):
+        STANDARD = "standard", "Standard"
+        INTERACTIVE = "interactive", "Interactive"
+        ASYNC = "async", "Async"
+
+    class NetworkPolicyChoices(models.TextChoices):
+        EGRESS_ALLOWLIST = "egress_allowlist", "Egress allowlist"
+        NONE = "none", "No network"
+
+    skill = models.OneToOneField(
+        Skill,
+        on_delete=models.CASCADE,
+        related_name="execution_spec",
+    )
+    version = models.ForeignKey(
+        SkillVersion,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="execution_specs",
+    )
+    runtime = models.CharField(
+        max_length=20,
+        choices=RuntimeChoices.choices,
+        default=RuntimeChoices.PYTHON,
+    )
+    latency_class = models.CharField(
+        max_length=20,
+        choices=LatencyClassChoices.choices,
+        default=LatencyClassChoices.STANDARD,
+    )
+    entrypoint_path = models.CharField(max_length=500, default="run.py")
+    input_schema = models.JSONField(default=dict, blank=True)
+    output_schema = models.JSONField(default=dict, blank=True)
+    secrets_scope = models.CharField(max_length=50, default="department")
+    network_policy = models.CharField(
+        max_length=50,
+        choices=NetworkPolicyChoices.choices,
+        default=NetworkPolicyChoices.EGRESS_ALLOWLIST,
+    )
+    allowed_egress = models.JSONField(default=list, blank=True)
+    timeout_seconds = models.PositiveIntegerField(default=30)
+    memory_mb = models.PositiveIntegerField(default=512)
+    max_output_bytes_inline = models.PositiveIntegerField(default=32768)
+    max_runs_per_day = models.PositiveIntegerField(default=100)
+    max_concurrent_runs = models.PositiveIntegerField(default=1)
+
+    class Meta:
+        db_table = "skill_execution_spec"
+        indexes = [
+            models.Index(fields=["skill"], name="idx_skill_exec_spec_skill"),
+            models.Index(fields=["version"], name="idx_skill_exec_spec_version"),
+        ]
+
+    def __str__(self):
+        return f"{self.skill.slug} execution spec"
+
+
+class SkillExecutionRun(BaseModel):
+    class StatusChoices(models.TextChoices):
+        PENDING_APPROVAL = "pending_approval", "Pending approval"
+        QUEUED = "queued", "Queued"
+        RUNNING = "running", "Running"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+        TIMEOUT = "timeout", "Timeout"
+        CANCELLED = "cancelled", "Cancelled"
+
+    class CallerTypeChoices(models.TextChoices):
+        USER = "user", "User"
+        AGENT = "agent", "Agent"
+        API_KEY = "api_key", "API key"
+        OAUTH = "oauth", "OAuth"
+
+    workspace = models.ForeignKey(
+        "orgs.Workspace",
+        on_delete=models.CASCADE,
+        related_name="skill_execution_runs",
+    )
+    skill = models.ForeignKey(
+        Skill,
+        on_delete=models.CASCADE,
+        related_name="execution_runs",
+    )
+    version = models.ForeignKey(
+        SkillVersion,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="execution_runs",
+    )
+    spec = models.ForeignKey(
+        SkillExecutionSpec,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="runs",
+    )
+    department = models.ForeignKey(
+        "orgs.Department",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="skill_execution_runs",
+    )
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="skill_execution_runs",
+    )
+    agent = models.ForeignKey(
+        "agents.Agent",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="skill_execution_runs",
+    )
+    caller_type = models.CharField(max_length=20, choices=CallerTypeChoices.choices)
+    status = models.CharField(
+        max_length=30,
+        choices=StatusChoices.choices,
+        default=StatusChoices.QUEUED,
+    )
+    inputs = models.JSONField(default=dict, blank=True)
+    input_hash = models.CharField(max_length=64)
+    output = models.JSONField(null=True, blank=True)
+    output_uri = models.CharField(max_length=1000, blank=True, default="")
+    logs_uri = models.CharField(max_length=1000, blank=True, default="")
+    error_message = models.TextField(blank=True, default="")
+    external_job_name = models.CharField(max_length=255, blank=True, default="")
+    approved_by = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_skill_execution_runs",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    resource_usage = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        db_table = "skill_execution_run"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["workspace", "-created_at"], name="idx_exec_run_ws_created"),
+            models.Index(fields=["skill", "-created_at"], name="idx_exec_run_skill_created"),
+            models.Index(fields=["status", "-created_at"], name="idx_exec_run_status_created"),
+            models.Index(fields=["agent", "-created_at"], name="idx_exec_run_agent_created"),
+            models.Index(fields=["user", "-created_at"], name="idx_exec_run_user_created"),
+        ]
+
+    def __str__(self):
+        return f"{self.skill.slug} run {self.id} ({self.status})"
+
+
+class SkillExecutionQuotaCounter(BaseModel):
+    workspace = models.ForeignKey(
+        "orgs.Workspace",
+        on_delete=models.CASCADE,
+        related_name="skill_execution_quota_counters",
+    )
+    skill = models.ForeignKey(
+        Skill,
+        on_delete=models.CASCADE,
+        related_name="execution_quota_counters",
+    )
+    day = models.DateField()
+    run_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = "skill_execution_quota_counter"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "skill", "day"],
+                name="uq_exec_quota_ws_skill_day",
+            )
+        ]
+        indexes = [
+            models.Index(fields=["workspace", "day"], name="idx_exec_quota_ws_day"),
+            models.Index(fields=["skill", "day"], name="idx_exec_quota_skill_day"),
+        ]
+
+    def __str__(self):
+        return f"{self.skill.slug} executions on {self.day}: {self.run_count}"
 
 
 class FileTypeChoices(models.TextChoices):

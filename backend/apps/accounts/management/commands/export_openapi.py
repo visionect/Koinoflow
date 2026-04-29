@@ -1,8 +1,7 @@
 import json
 
-from django.core.management.base import BaseCommand
-
 from config.api import api
+from django.core.management.base import BaseCommand
 
 
 class Command(BaseCommand):

@@ -23,6 +23,9 @@ env:
   MIGRATION_JOB: koinoflow-migrate
   CLOUD_TASKS_QUEUE: koinoflow-tasks
   CLOUD_TASKS_SERVICE_ACCOUNT: koinoflow-tasks-invoker@koinoflow-infra.iam.gserviceaccount.com
+  SKILL_EXECUTOR_JOB: koinoflow-skill-executor
+  SKILL_EXECUTOR_SERVICE_ACCOUNT: koinoflow-skill-executor@koinoflow-infra.iam.gserviceaccount.com
+  SKILL_RUNS_BUCKET: gs://koinoflow-skill-runs
 
 jobs:
   deploy:
@@ -78,6 +81,22 @@ jobs:
 
           echo "MCP_IMAGE=${image}" >> "${GITHUB_ENV}"
 
+      - name: Build and push skill executor image
+        run: |
+          set -euo pipefail
+          image="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/skill-executor:${GITHUB_SHA}"
+          latest="${REGION}-docker.pkg.dev/${PROJECT_ID}/${ARTIFACT_REPOSITORY}/skill-executor:latest"
+
+          docker build \
+            --tag "${image}" \
+            --tag "${latest}" \
+            ./skill-executor
+
+          docker push "${image}"
+          docker push "${latest}"
+
+          echo "SKILL_EXECUTOR_IMAGE=${image}" >> "${GITHUB_ENV}"
+
       - name: Run database migrations
         run: |
           set -euo pipefail
@@ -106,6 +125,60 @@ jobs:
               --max-concurrent-dispatches=10 \
               --max-attempts=5
           fi
+
+      - name: Ensure skill execution infrastructure
+        run: |
+          set -euo pipefail
+
+          if ! gcloud storage buckets describe "${SKILL_RUNS_BUCKET}" \
+            --project="${PROJECT_ID}" >/dev/null 2>&1; then
+            gcloud storage buckets create "${SKILL_RUNS_BUCKET}" \
+              --project="${PROJECT_ID}" \
+              --location="${REGION}" \
+              --uniform-bucket-level-access
+          fi
+
+          lifecycle="$(mktemp)"
+          cat > "${lifecycle}" <<'EOF'
+          {
+            "rule": [
+              {
+                "action": {"type": "Delete"},
+                "condition": {"age": 30}
+              }
+            ]
+          }
+          EOF
+          gcloud storage buckets update "${SKILL_RUNS_BUCKET}" \
+            --project="${PROJECT_ID}" \
+            --lifecycle-file="${lifecycle}"
+
+          if ! gcloud run jobs describe "${SKILL_EXECUTOR_JOB}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" >/dev/null 2>&1; then
+            gcloud run jobs create "${SKILL_EXECUTOR_JOB}" \
+              --project="${PROJECT_ID}" \
+              --region="${REGION}" \
+              --image="${SKILL_EXECUTOR_IMAGE}" \
+              --service-account="${SKILL_EXECUTOR_SERVICE_ACCOUNT}" \
+              --max-retries=0 \
+              --task-timeout=300 \
+              --memory=512Mi \
+              --cpu=1
+          else
+            gcloud run jobs update "${SKILL_EXECUTOR_JOB}" \
+              --project="${PROJECT_ID}" \
+              --region="${REGION}" \
+              --image="${SKILL_EXECUTOR_IMAGE}" \
+              --service-account="${SKILL_EXECUTOR_SERVICE_ACCOUNT}" \
+              --max-retries=0 \
+              --task-timeout=300 \
+              --memory=512Mi \
+              --cpu=1
+          fi
+
+          echo "::notice::Skill execution IAM must allow the backend runtime service account to run ${SKILL_EXECUTOR_JOB} and write ${SKILL_RUNS_BUCKET}."
+          echo "::notice::The executor service account ${SKILL_EXECUTOR_SERVICE_ACCOUNT} must be able to read/write ${SKILL_RUNS_BUCKET}."
 
       - name: Deploy Cloud Run services
         run: |
@@ -137,6 +210,7 @@ jobs:
           backend_secrets+=",VERTEX_CLIENT_EMAIL=VERTEX_CLIENT_EMAIL:latest"
           backend_secrets+=",VERTEX_CLIENT_ID=VERTEX_CLIENT_ID:latest"
           backend_secrets+=",VERTEX_CLIENT_CERT_URL=VERTEX_CLIENT_CERT_URL:latest"
+          backend_secrets+=",SKILL_EXECUTION_CALLBACK_SECRET=SKILL_EXECUTION_CALLBACK_SECRET:latest"
 
           backend_env_vars="TASK_BACKEND=cloudtasks"
           backend_env_vars+=",CLOUD_TASKS_PROJECT=${PROJECT_ID}"
@@ -144,6 +218,12 @@ jobs:
           backend_env_vars+=",CLOUD_TASKS_QUEUE=${CLOUD_TASKS_QUEUE}"
           backend_env_vars+=",CLOUD_TASKS_SERVICE_URL=https://app.koinoflow.com"
           backend_env_vars+=",CLOUD_TASKS_SERVICE_ACCOUNT=${CLOUD_TASKS_SERVICE_ACCOUNT}"
+          backend_env_vars+=",SKILL_EXECUTION_BACKEND=cloud_run_jobs"
+          backend_env_vars+=",SKILL_EXECUTION_GCP_PROJECT=${PROJECT_ID}"
+          backend_env_vars+=",SKILL_EXECUTION_GCP_LOCATION=${REGION}"
+          backend_env_vars+=",SKILL_EXECUTION_CLOUD_RUN_JOB=${SKILL_EXECUTOR_JOB}"
+          backend_env_vars+=",SKILL_EXECUTION_RUNS_BUCKET=${SKILL_RUNS_BUCKET}"
+          backend_env_vars+=",SKILL_EXECUTION_PUBLIC_BASE_URL=https://app.koinoflow.com"
 
           gcloud run services update "${BACKEND_SERVICE}" \
             --project="${PROJECT_ID}" \

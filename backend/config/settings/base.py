@@ -135,6 +135,20 @@ CELERY_BEAT_SCHEDULE = {
 # Task backend selection
 TASK_BACKEND = config("TASK_BACKEND", default="celery")
 
+# Skill execution
+# record_only records a Cloud Run Job-shaped dispatch without requiring GCP
+# credentials in local/dev. inline_echo is useful for tests and demos.
+SKILL_EXECUTION_BACKEND = config("SKILL_EXECUTION_BACKEND", default="record_only")
+SKILL_EXECUTION_GCP_PROJECT = config("SKILL_EXECUTION_GCP_PROJECT", default="")
+SKILL_EXECUTION_GCP_LOCATION = config("SKILL_EXECUTION_GCP_LOCATION", default="europe-west1")
+SKILL_EXECUTION_CLOUD_RUN_JOB = config(
+    "SKILL_EXECUTION_CLOUD_RUN_JOB",
+    default="koinoflow-skill-executor",
+)
+SKILL_EXECUTION_RUNS_BUCKET = config("SKILL_EXECUTION_RUNS_BUCKET", default="")
+SKILL_EXECUTION_CALLBACK_SECRET = config("SKILL_EXECUTION_CALLBACK_SECRET", default="")
+SKILL_EXECUTION_PUBLIC_BASE_URL = config("SKILL_EXECUTION_PUBLIC_BASE_URL", default="")
+
 # Cloud Tasks (used when TASK_BACKEND=cloudtasks)
 CLOUD_TASKS_PROJECT = config("CLOUD_TASKS_PROJECT", default="")
 CLOUD_TASKS_LOCATION = config("CLOUD_TASKS_LOCATION", default="")

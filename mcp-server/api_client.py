@@ -1,5 +1,4 @@
 import httpx
-
 from config import API_BASE_URL, logger
 
 
@@ -158,6 +157,33 @@ class KoinoflowAPIClient:
                     "frontmatter_yaml": frontmatter_yaml,
                     "change_summary": change_summary,
                 },
+            )
+            if not response.is_success:
+                raise KoinoflowAPIError(response.status_code, response.text)
+            return response.json()
+
+    async def execute_skill(
+        self,
+        slug: str,
+        *,
+        inputs: dict,
+        approved: bool = False,
+    ) -> dict:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{self.base_url}/skills/{slug}/execute",
+                headers=self._headers(),
+                json={"inputs": inputs, "approved": approved},
+            )
+            if not response.is_success:
+                raise KoinoflowAPIError(response.status_code, response.text)
+            return response.json()
+
+    async def get_run(self, run_id: str) -> dict:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.base_url}/skill-executions/{run_id}",
+                headers=self._headers(),
             )
             if not response.is_success:
                 raise KoinoflowAPIError(response.status_code, response.text)
