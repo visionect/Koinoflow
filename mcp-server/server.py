@@ -10,6 +10,13 @@ import time
 from pathlib import Path
 
 import uvicorn
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
+from mcp.types import ToolAnnotations
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+
 from api_client import KoinoflowAPIClient, KoinoflowAPIError
 from auth import (
     get_authorization_server_metadata,
@@ -26,12 +33,6 @@ from config import (
     SERVER_HOST,
     SERVER_PORT,
 )
-from mcp.server.fastmcp import Context, FastMCP
-from mcp.server.transport_security import TransportSecuritySettings
-from mcp.types import ToolAnnotations
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
 
 # ── Per-request auth context (set by middleware) ─────────────────────────
 
