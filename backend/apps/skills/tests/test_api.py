@@ -14,7 +14,13 @@ from apps.orgs.tests.factories import DepartmentFactory, TeamFactory
 from apps.skills.discovery import build_skill_indexed_text, queue_skill_discovery_embedding
 from apps.skills.enums import StatusChoices, VisibilityChoices
 from apps.skills.files import resolve_files
-from apps.skills.models import Skill, SkillDiscoveryEmbedding, SkillVersion, VersionFile
+from apps.skills.models import (
+    Skill,
+    SkillDiscoveryEmbedding,
+    SkillExecutionRun,
+    SkillVersion,
+    VersionFile,
+)
 from apps.skills.tests.factories import SkillFactory, SkillVersionFactory, VersionFileFactory
 
 
@@ -198,6 +204,122 @@ class TestGetProcess:
             HTTP_AUTHORIZATION=f"Bearer {raw_key}",
         )
         assert resp.status_code == 404
+
+
+@pytest.mark.django_db
+class TestSkillExecution:
+    def test_enable_execution_and_execute_skill(self, auth_client, admin_membership, settings):
+        settings.SKILL_EXECUTION_BACKEND = "inline_echo"
+        ws = admin_membership.workspace
+        team = TeamFactory(workspace=ws, slug="eng")
+        dept = DepartmentFactory(team=team, slug="ops")
+        skill = SkillFactory(department=dept, slug="lookup", status=StatusChoices.PUBLISHED)
+        version = SkillVersionFactory(
+            skill=skill,
+            version_number=1,
+            content_md="# Lookup",
+            koinoflow_metadata={"risk_level": "low", "requires_human_approval": False},
+        )
+        skill.current_version = version
+        skill.save()
+
+        payload = {
+            "enabled": True,
+            "runtime": "python",
+            "latency_class": "standard",
+            "entrypoint_path": "run.py",
+            "input_schema": {
+                "type": "object",
+                "required": ["customer_id"],
+                "properties": {"customer_id": {"type": "string"}},
+                "additionalProperties": False,
+            },
+            "output_schema": {},
+            "secrets_scope": "department",
+            "network": {"policy": "egress_allowlist", "allowed": ["api.example.com"]},
+            "limits": {
+                "timeout_seconds": 30,
+                "memory_mb": 512,
+                "max_output_bytes_inline": 32768,
+                "max_runs_per_day": 100,
+                "max_concurrent_runs": 1,
+            },
+        }
+        resp = auth_client.patch(
+            "/api/v1/skills/lookup/execution",
+            data=payload,
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert resp.json()["enabled"] is True
+        skill.refresh_from_db()
+        assert skill.execution_enabled is True
+
+        bad_resp = auth_client.post(
+            "/api/v1/skills/lookup/execute",
+            data={"inputs": {}},
+            content_type="application/json",
+        )
+        assert bad_resp.status_code == 400
+
+        run_resp = auth_client.post(
+            "/api/v1/skills/lookup/execute",
+            data={"inputs": {"customer_id": "cus_123"}},
+            content_type="application/json",
+        )
+        assert run_resp.status_code == 201
+        data = run_resp.json()
+        assert data["status"] == SkillExecutionRun.StatusChoices.SUCCEEDED
+        assert data["output"]["inputs"] == {"customer_id": "cus_123"}
+
+        get_resp = auth_client.get(f"/api/v1/skill-executions/{data['id']}")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["skill_slug"] == "lookup"
+
+    def test_high_risk_execution_requires_approval(self, auth_client, admin_membership):
+        ws = admin_membership.workspace
+        team = TeamFactory(workspace=ws, slug="eng")
+        dept = DepartmentFactory(team=team, slug="ops")
+        skill = SkillFactory(department=dept, slug="danger", status=StatusChoices.PUBLISHED)
+        version = SkillVersionFactory(
+            skill=skill,
+            version_number=1,
+            content_md="# Danger",
+            koinoflow_metadata={"risk_level": "high", "requires_human_approval": False},
+        )
+        skill.current_version = version
+        skill.save()
+
+        resp = auth_client.patch(
+            "/api/v1/skills/danger/execution",
+            data={
+                "enabled": True,
+                "runtime": "python",
+                "latency_class": "standard",
+                "entrypoint_path": "run.py",
+                "input_schema": {},
+                "output_schema": {},
+                "secrets_scope": "department",
+                "network": {"policy": "egress_allowlist", "allowed": []},
+                "limits": {
+                    "timeout_seconds": 30,
+                    "memory_mb": 512,
+                    "max_output_bytes_inline": 32768,
+                    "max_runs_per_day": 100,
+                    "max_concurrent_runs": 1,
+                },
+            },
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+
+        run_resp = auth_client.post(
+            "/api/v1/skills/danger/execute",
+            data={"inputs": {}},
+            content_type="application/json",
+        )
+        assert run_resp.status_code == 201
+        assert run_resp.json()["status"] == SkillExecutionRun.StatusChoices.PENDING_APPROVAL
 
 
 @pytest.mark.django_db

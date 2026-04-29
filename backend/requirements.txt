@@ -23,6 +23,8 @@ PyYAML>=6.0,<7.0
 
 # Cloud Tasks (async task dispatch in production)
 google-cloud-tasks>=2.16,<3.0
+google-cloud-storage>=2.18,<3.0
+jsonschema>=4.23,<5.0
 
 # Capture AI extraction pipeline
 google-auth>=2.36.0,<3.0.0

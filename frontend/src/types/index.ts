@@ -222,6 +222,7 @@ export interface Skill {
   risk_level: RiskLevel | null
   retrieval_keywords: string[]
   requires_human_approval: boolean
+  execution_enabled: boolean
   discovery_embedding_status: DiscoveryEmbeddingStatus
   created_at: string
   updated_at: string
@@ -245,9 +246,72 @@ export interface SkillDetail {
   current_version: SkillVersion | null
   last_reviewed_at: string | null
   needs_audit: boolean
+  execution_enabled: boolean
   discovery_embedding_status: DiscoveryEmbeddingStatus
   created_at: string
   updated_at: string
+}
+
+export interface SkillExecutionSpec {
+  enabled: boolean
+  version_number: number | null
+  runtime: "python"
+  latency_class: "interactive" | "standard" | "async"
+  entrypoint_path: string
+  input_schema: Record<string, unknown>
+  output_schema: Record<string, unknown>
+  secrets_scope: "department"
+  network: {
+    policy: "egress_allowlist" | "none"
+    allowed: string[]
+  }
+  limits: {
+    timeout_seconds: number
+    memory_mb: number
+    max_output_bytes_inline: number
+    max_runs_per_day: number
+    max_concurrent_runs: number
+  }
+  updated_at: string | null
+}
+
+export interface UpdateSkillExecutionSpecInput {
+  enabled: boolean
+  runtime: "python"
+  latency_class: "interactive" | "standard" | "async"
+  entrypoint_path: string
+  input_schema: Record<string, unknown>
+  output_schema: Record<string, unknown>
+  secrets_scope: "department"
+  network: SkillExecutionSpec["network"]
+  limits: SkillExecutionSpec["limits"]
+}
+
+export interface SkillExecutionRun {
+  id: string
+  skill_id: string
+  skill_slug: string
+  version_number: number | null
+  status:
+    | "pending_approval"
+    | "queued"
+    | "running"
+    | "succeeded"
+    | "failed"
+    | "timeout"
+    | "cancelled"
+  caller_type: "user" | "agent" | "api_key" | "oauth"
+  requires_approval: boolean
+  output: Record<string, unknown> | null
+  output_uri: string
+  logs_uri: string
+  error_message: string
+  external_job_name: string
+  created_at: string
+  updated_at: string
+  started_at: string | null
+  finished_at: string | null
+  expires_at: string | null
 }
 
 export interface ProcessAuditRule {

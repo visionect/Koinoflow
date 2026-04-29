@@ -4,5 +4,6 @@ from .base import TaskBackend
 
 
 class CeleryBackend(TaskBackend):
-    def enqueue(self, task_name: str, **kwargs) -> None:
-        celery_app.send_task(task_name, kwargs=kwargs)
+    def enqueue(self, task_name: str, **kwargs) -> str | None:
+        result = celery_app.send_task(task_name, kwargs=kwargs)
+        return result.id

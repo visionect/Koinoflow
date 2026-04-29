@@ -198,14 +198,22 @@ def index_skill_version(version_id: str, *, force: bool = False) -> SkillDiscove
     return embedding
 
 
-def queue_skill_discovery_embedding(version_id: str, *, force: bool = False) -> None:
+def queue_skill_discovery_embedding(version_id: str, *, force: bool = False) -> str | None:
     try:
         from tasks import task_backend
 
-        task_backend.enqueue(
+        task_id = task_backend.enqueue(
             "index_skill_discovery_embedding",
             version_id=str(version_id),
             force=force,
         )
+        logger.info(
+            "Queued skill discovery embedding: version_id=%s force=%s task_id=%s",
+            version_id,
+            force,
+            task_id,
+        )
+        return task_id
     except Exception:
         logger.warning("Failed to queue skill discovery embedding", exc_info=True)
+        return None

@@ -18,7 +18,7 @@ class CloudTasksBackend(TaskBackend):
             settings.CLOUD_TASKS_QUEUE,
         )
 
-    def enqueue(self, task_name: str, **kwargs) -> None:
+    def enqueue(self, task_name: str, **kwargs) -> str:
         payload = json.dumps({"task_name": task_name, "kwargs": kwargs}).encode()
         url = f"{settings.CLOUD_TASKS_SERVICE_URL}/api/internal/tasks/run"
 
@@ -38,5 +38,12 @@ class CloudTasksBackend(TaskBackend):
                 "audience": settings.CLOUD_TASKS_SERVICE_URL,
             }
 
-        self._client.create_task(parent=self._parent, task=task)
-        logger.info("Enqueued Cloud Task: %s", task_name)
+        response = self._client.create_task(parent=self._parent, task=task)
+        logger.info(
+            "Enqueued Cloud Task: %s task_name=%s queue=%s url=%s",
+            response.name,
+            task_name,
+            self._parent,
+            url,
+        )
+        return response.name

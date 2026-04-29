@@ -1,0 +1,227 @@
+import json
+import zipfile
+from io import BytesIO
+
+import pytest
+
+from apps.skills.enums import StatusChoices
+from apps.skills.execution import issue_callback_token
+from apps.skills.execution_artifacts import prepare_execution_artifacts
+from apps.skills.models import SkillExecutionRun, SkillExecutionSpec, VersionFile
+from apps.skills.tests.factories import SkillFactory, SkillVersionFactory, VersionFileFactory
+
+
+@pytest.mark.django_db
+class TestExecutionArtifacts:
+    def test_prepare_execution_artifacts_packages_version_files(
+        self,
+        admin_membership,
+        settings,
+        monkeypatch,
+    ):
+        settings.SKILL_EXECUTION_RUNS_BUCKET = "gs://test-runs"
+        skill = SkillFactory(
+            department__team__workspace=admin_membership.workspace, status=StatusChoices.PUBLISHED
+        )
+        version = SkillVersionFactory(skill=skill, version_number=1)
+        skill.current_version = version
+        skill.save()
+        VersionFileFactory(
+            version=version,
+            path="run.py",
+            content="import json, sys\nprint(json.dumps({'ok': True}))",
+            file_type="python",
+        )
+        VersionFileFactory(
+            version=version,
+            path="lib/helper.py",
+            content="VALUE = 1",
+            file_type="python",
+        )
+        spec = SkillExecutionSpec.objects.create(
+            skill=skill, version=version, entrypoint_path="run.py"
+        )
+        run = SkillExecutionRun.objects.create(
+            workspace=admin_membership.workspace,
+            skill=skill,
+            version=version,
+            spec=spec,
+            department=skill.department,
+            caller_type=SkillExecutionRun.CallerTypeChoices.USER,
+            status=SkillExecutionRun.StatusChoices.QUEUED,
+            inputs={"name": "Ada"},
+            input_hash="a" * 64,
+        )
+
+        uploads = {}
+
+        def fake_upload(uri, data, content_type):
+            uploads[uri] = (data, content_type)
+
+        monkeypatch.setattr("apps.skills.execution_artifacts._upload_bytes", fake_upload)
+        artifacts = prepare_execution_artifacts(run)
+
+        assert artifacts.package_uri == f"gs://test-runs/runs/{run.id}/skill.zip"
+        package_data, package_type = uploads[artifacts.package_uri]
+        assert package_type == "application/zip"
+        with zipfile.ZipFile(BytesIO(package_data)) as zf:
+            assert sorted(zf.namelist()) == ["lib/helper.py", "run.py"]
+        inputs_data, inputs_type = uploads[artifacts.inputs_uri]
+        assert inputs_type == "application/json"
+        assert json.loads(inputs_data.decode()) == {"name": "Ada"}
+        manifest_data, manifest_type = uploads[artifacts.manifest_uri]
+        assert manifest_type == "application/json"
+        assert json.loads(manifest_data.decode())["entrypoint_path"] == "run.py"
+
+    def test_prepare_execution_artifacts_rejects_missing_entrypoint(
+        self, admin_membership, settings
+    ):
+        settings.SKILL_EXECUTION_RUNS_BUCKET = "gs://test-runs"
+        skill = SkillFactory(
+            department__team__workspace=admin_membership.workspace, status=StatusChoices.PUBLISHED
+        )
+        version = SkillVersionFactory(skill=skill, version_number=1)
+        skill.current_version = version
+        skill.save()
+        spec = SkillExecutionSpec.objects.create(
+            skill=skill, version=version, entrypoint_path="run.py"
+        )
+        run = SkillExecutionRun.objects.create(
+            workspace=admin_membership.workspace,
+            skill=skill,
+            version=version,
+            spec=spec,
+            department=skill.department,
+            caller_type=SkillExecutionRun.CallerTypeChoices.USER,
+            status=SkillExecutionRun.StatusChoices.QUEUED,
+            inputs={},
+            input_hash="a" * 64,
+        )
+
+        with pytest.raises(Exception, match="Execution entrypoint not found"):
+            prepare_execution_artifacts(run)
+
+
+@pytest.mark.django_db
+class TestExecutionCallback:
+    def test_callback_accepts_valid_token_and_terminal_status(
+        self,
+        auth_client,
+        admin_membership,
+        settings,
+    ):
+        settings.SKILL_EXECUTION_CALLBACK_SECRET = "test-secret"
+        skill = SkillFactory(
+            department__team__workspace=admin_membership.workspace, status=StatusChoices.PUBLISHED
+        )
+        version = SkillVersionFactory(skill=skill, version_number=1)
+        skill.current_version = version
+        skill.save()
+        spec = SkillExecutionSpec.objects.create(skill=skill, version=version)
+        run = SkillExecutionRun.objects.create(
+            workspace=admin_membership.workspace,
+            skill=skill,
+            version=version,
+            spec=spec,
+            department=skill.department,
+            caller_type=SkillExecutionRun.CallerTypeChoices.USER,
+            status=SkillExecutionRun.StatusChoices.QUEUED,
+            inputs={},
+            input_hash="a" * 64,
+        )
+        token = issue_callback_token(run)
+
+        resp = auth_client.post(
+            f"/api/v1/skill-executions/{run.id}/callback",
+            data={
+                "status": "succeeded",
+                "output": {"ok": True},
+                "output_uri": "gs://bucket/out.json",
+                "logs_uri": "gs://bucket/logs.txt",
+                "resource_usage": {"exit_code": 0},
+            },
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        assert resp.status_code == 200
+        run.refresh_from_db()
+        assert run.status == SkillExecutionRun.StatusChoices.SUCCEEDED
+        assert run.output == {"ok": True}
+        assert run.finished_at is not None
+
+        second = auth_client.post(
+            f"/api/v1/skill-executions/{run.id}/callback",
+            data={"status": "failed", "error_message": "late"},
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+        assert second.status_code == 409
+
+    def test_callback_rejects_invalid_token(self, auth_client, admin_membership):
+        skill = SkillFactory(
+            department__team__workspace=admin_membership.workspace, status=StatusChoices.PUBLISHED
+        )
+        version = SkillVersionFactory(skill=skill, version_number=1)
+        skill.current_version = version
+        skill.save()
+        spec = SkillExecutionSpec.objects.create(skill=skill, version=version)
+        run = SkillExecutionRun.objects.create(
+            workspace=admin_membership.workspace,
+            skill=skill,
+            version=version,
+            spec=spec,
+            department=skill.department,
+            caller_type=SkillExecutionRun.CallerTypeChoices.USER,
+            status=SkillExecutionRun.StatusChoices.QUEUED,
+            inputs={},
+            input_hash="a" * 64,
+        )
+
+        resp = auth_client.post(
+            f"/api/v1/skill-executions/{run.id}/callback",
+            data={"status": "succeeded", "output": {"ok": True}},
+            content_type="application/json",
+            HTTP_AUTHORIZATION="Bearer nope",
+        )
+        assert resp.status_code == 401
+
+
+@pytest.mark.django_db
+class TestExecutionConcurrency:
+    def test_execute_rejects_when_concurrency_cap_reached(self, auth_client, admin_membership):
+        skill = SkillFactory(
+            department__team__workspace=admin_membership.workspace, status=StatusChoices.PUBLISHED
+        )
+        version = SkillVersionFactory(skill=skill, version_number=1)
+        skill.current_version = version
+        skill.execution_enabled = True
+        skill.save()
+        VersionFile.objects.create(
+            version=version,
+            path="run.py",
+            content="import json\nprint(json.dumps({'ok': True}))",
+            file_type="python",
+        )
+        spec = SkillExecutionSpec.objects.create(
+            skill=skill,
+            version=version,
+            max_concurrent_runs=1,
+        )
+        SkillExecutionRun.objects.create(
+            workspace=admin_membership.workspace,
+            skill=skill,
+            version=version,
+            spec=spec,
+            department=skill.department,
+            caller_type=SkillExecutionRun.CallerTypeChoices.USER,
+            status=SkillExecutionRun.StatusChoices.QUEUED,
+            inputs={},
+            input_hash="a" * 64,
+        )
+
+        resp = auth_client.post(
+            f"/api/v1/skills/{skill.slug}/execute",
+            data={"inputs": {}},
+            content_type="application/json",
+        )
+        assert resp.status_code == 429
