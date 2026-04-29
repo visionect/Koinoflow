@@ -17,6 +17,12 @@ from typing import Any
 
 from django.conf import settings
 
+from apps.connectors.capture.llm import (
+    VERTEX_AUTH_SCOPE,
+    _resolve_vertex_project,
+    _vertex_service_account_info,
+)
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL = "claude-sonnet-4-6"
@@ -77,6 +83,32 @@ def _sse(event: str, data: dict[str, Any]) -> bytes:
     return f"event: {event}\ndata: {payload}\n\n".encode()
 
 
+def _vertex_service_account_access_token() -> str | None:
+    credentials_info = _vertex_service_account_info(settings)
+    if credentials_info is None:
+        return None
+
+    from google.auth.transport.requests import Request
+    from google.oauth2 import service_account
+
+    credentials = service_account.Credentials.from_service_account_info(
+        credentials_info, scopes=[VERTEX_AUTH_SCOPE]
+    )
+    credentials.refresh(Request())
+    return str(credentials.token) if credentials.token else None
+
+
+def _build_anthropic_vertex_client(anthropic: Any, *, project: str, location: str):
+    client_kwargs: dict[str, Any] = {
+        "project_id": project,
+        "region": location,
+    }
+    access_token = _vertex_service_account_access_token()
+    if access_token:
+        client_kwargs["access_token"] = access_token
+    return anthropic.AnthropicVertex(**client_kwargs)
+
+
 def stream_ai_edit(
     *,
     file_path: str,
@@ -96,9 +128,7 @@ def stream_ai_edit(
         yield _sse("error", {"message": "anthropic SDK is not installed"})
         return
 
-    project = getattr(settings, "VERTEX_CLIENT_PROJECT_ID", "") or getattr(
-        settings, "VERTEX_PROJECT_ID", ""
-    )
+    project = _resolve_vertex_project(settings)
     location = getattr(settings, "VERTEX_LOCATION", "global")
     if not project:
         yield _sse(
@@ -132,7 +162,7 @@ def stream_ai_edit(
     )
 
     try:
-        client = anthropic.AnthropicVertex(project_id=project, region=location)
+        client = _build_anthropic_vertex_client(anthropic, project=project, location=location)
         with client.messages.stream(
             model=chosen_model,
             max_tokens=MAX_OUTPUT_TOKENS,
