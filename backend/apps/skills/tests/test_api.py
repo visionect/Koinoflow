@@ -21,7 +21,12 @@ from apps.skills.models import (
     SkillVersion,
     VersionFile,
 )
-from apps.skills.tests.factories import SkillFactory, SkillVersionFactory, VersionFileFactory
+from apps.skills.tests.factories import (
+    SkillExecutionSpecFactory,
+    SkillFactory,
+    SkillVersionFactory,
+    VersionFileFactory,
+)
 
 
 class TestSkillDiscoveryQueue:
@@ -682,6 +687,21 @@ class TestPublishProcess:
 
         skill.refresh_from_db()
         assert skill.current_version_id == v2.id
+
+    def test_publish_updates_execution_spec_version(self, auth_client, admin_membership):
+        ws = admin_membership.workspace
+        team = TeamFactory(workspace=ws, slug="eng")
+        dept = DepartmentFactory(team=team, slug="frontend")
+        skill = SkillFactory(department=dept, slug="deploy", status=StatusChoices.DRAFT)
+        v1 = SkillVersionFactory(skill=skill, version_number=1)
+        v2 = SkillVersionFactory(skill=skill, version_number=2)
+        spec = SkillExecutionSpecFactory(skill=skill, version=v1)
+
+        resp = auth_client.post("/api/v1/skills/deploy/publish")
+        assert resp.status_code == 200
+
+        spec.refresh_from_db()
+        assert spec.version_id == v2.id
 
 
 @pytest.mark.django_db

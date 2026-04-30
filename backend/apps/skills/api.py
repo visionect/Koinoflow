@@ -2356,9 +2356,13 @@ def stream_skill_file_ai_edit(
                 recent_logs = None
 
     input_schema: dict | None = None
+    entrypoint_path: str | None = None
     spec = getattr(skill, "execution_spec", None)
-    if spec is not None and isinstance(spec.input_schema, dict) and spec.input_schema:
-        input_schema = spec.input_schema
+    if spec is not None:
+        if isinstance(spec.input_schema, dict) and spec.input_schema:
+            input_schema = spec.input_schema
+        if spec.entrypoint_path:
+            entrypoint_path = spec.entrypoint_path
 
     skill_description = (skill.description or skill.title or "").strip() or None
 
@@ -2372,6 +2376,7 @@ def stream_skill_file_ai_edit(
             input_schema=input_schema,
             recent_error=recent_error,
             recent_logs=recent_logs,
+            entrypoint_path=entrypoint_path,
             model=payload.model,
         )
 
@@ -2877,6 +2882,14 @@ def publish_skill(request, slug: str, system_kind: str | None = ""):
     skill.last_reviewed_at = timezone.now()
     skill.save(update_fields=["current_version", "status", "last_reviewed_at", "updated_at"])
     transaction.on_commit(lambda: queue_skill_discovery_embedding(str(latest.id), force=True))
+
+    try:
+        spec = skill.execution_spec
+        if spec.version_id != latest.id:
+            spec.version = latest
+            spec.save(update_fields=["version"])
+    except SkillExecutionSpec.DoesNotExist:
+        pass
 
     skill = Skill.objects.select_related(
         "department__team",

@@ -272,7 +272,7 @@ async def test_list_skills_formats_output():
 
     result = await list_skills()
 
-    assert "Showing 1–2 of 2 processes" in result
+    assert "Showing 1–2 of 2 skills" in result
     assert "**Deploy to Production**" in result
     assert "`deploy-to-production`" in result
     assert "Step-by-step deployment guide" in result
@@ -293,7 +293,7 @@ async def test_discover_skills_formats_ranked_output():
     assert route.called
     assert route.calls[0].request.url.params["query"] == "ship production"
     assert route.calls[0].request.url.params["limit"] == "5"
-    assert "Top 1 process matches" in result
+    assert "Top 1 skill matches" in result
     assert "**Deploy to Production**" in result
     assert "`deploy-to-production`" in result
     assert "[score: 0.92]" in result
@@ -312,7 +312,7 @@ async def test_list_skills_empty():
 
     result = await list_skills()
 
-    assert result == "No processes found."
+    assert result == "No skills found."
 
 
 @respx.mock
@@ -346,7 +346,7 @@ async def test_read_skill_logs_usage():
 async def test_propose_skill_update_returns_suggestions_and_token():
     _set_token_scope()
     respx.get("http://testserver/api/v1/settings").mock(
-        return_value=Response(200, json={"allow_agent_process_updates": True})
+        return_value=Response(200, json={"allow_agent_skill_updates": True})
     )
     respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL_WITH_FRONTMATTER)
@@ -371,7 +371,7 @@ async def test_propose_skill_update_returns_suggestions_and_token():
 async def test_apply_skill_update_requires_write_scope():
     _set_token_scope("skills:read usage:write")
     respx.get("http://testserver/api/v1/settings").mock(
-        return_value=Response(200, json={"allow_agent_process_updates": True})
+        return_value=Response(200, json={"allow_agent_skill_updates": True})
     )
     respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL)
@@ -398,7 +398,7 @@ async def test_apply_skill_update_requires_write_scope():
 async def test_apply_skill_update_creates_new_version():
     _set_token_scope()
     respx.get("http://testserver/api/v1/settings").mock(
-        return_value=Response(200, json={"allow_agent_process_updates": True})
+        return_value=Response(200, json={"allow_agent_skill_updates": True})
     )
     respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL)
@@ -486,7 +486,7 @@ async def test_list_skills_includes_risk_and_keywords():
 async def test_apply_skill_update_rejects_token_mismatch():
     _set_token_scope()
     respx.get("http://testserver/api/v1/settings").mock(
-        return_value=Response(200, json={"allow_agent_process_updates": True})
+        return_value=Response(200, json={"allow_agent_skill_updates": True})
     )
     respx.get("http://testserver/api/v1/skills/deploy-to-production").mock(
         return_value=Response(200, json=PROCESS_DETAIL)
@@ -513,7 +513,7 @@ async def test_apply_skill_update_rejects_token_mismatch():
 async def test_propose_skill_update_blocked_when_setting_disabled():
     _set_token_scope()
     respx.get("http://testserver/api/v1/settings").mock(
-        return_value=Response(200, json={"allow_agent_process_updates": False})
+        return_value=Response(200, json={"allow_agent_skill_updates": False})
     )
 
     result = await propose_skill_update(
@@ -523,14 +523,14 @@ async def test_propose_skill_update_blocked_when_setting_disabled():
     )
 
     assert "not enabled" in result
-    assert "Allow agent process updates" in result
+    assert "Allow agent skill updates" in result
 
 
 @respx.mock
 async def test_propose_skill_update_blocked_when_setting_null():
     _set_token_scope()
     respx.get("http://testserver/api/v1/settings").mock(
-        return_value=Response(200, json={"allow_agent_process_updates": None})
+        return_value=Response(200, json={"allow_agent_skill_updates": None})
     )
 
     result = await propose_skill_update(
