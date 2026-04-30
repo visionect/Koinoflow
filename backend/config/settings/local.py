@@ -4,6 +4,9 @@ from .base import *  # noqa: F401, F403
 
 DEBUG = True
 
+# Skip critical settings validation in development/local environments
+VALIDATE_CRITICAL_SETTINGS = False
+
 # Test/local encryption key — do NOT use in production
 CONNECTOR_ENCRYPTION_KEY = config(
     "CONNECTOR_ENCRYPTION_KEY",

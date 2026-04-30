@@ -1,0 +1,10 @@
+{% if days_stale is None %}
+The skill "{{ skill_title }}" in {{ department_name }} has never been called by any agent or integration.
+{% else %}
+The skill "{{ skill_title }}" in {{ department_name }} hasn't been used in {{ days_stale }} days.
+{% endif %}
+
+Review the skill and decide whether to keep or remove it:
+{{ skill_url }}
+
+You received this alert because staleness notifications are enabled for {{ workspace_name }}.

@@ -8,12 +8,12 @@ from django.utils import timezone
 
 from apps.orgs.enums import EntityType
 from apps.orgs.models import CoreSlug
+from apps.skills.constants import MAX_INDEXED_TEXT_CHARS
 from apps.skills.enums import StatusChoices
 from apps.skills.models import SkillDiscoveryEmbedding, SkillVersion
 
 logger = logging.getLogger(__name__)
 
-MAX_INDEXED_TEXT_CHARS = 20_000
 SUPPORTED_EMBEDDING_DIMENSIONS = 768
 
 

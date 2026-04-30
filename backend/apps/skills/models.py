@@ -5,6 +5,7 @@ from django.db.models import Q
 from pgvector.django import HnswIndex, VectorField
 
 from apps.common.models import BaseModel
+from apps.skills.constants import MAX_OUTPUT_BYTES_INLINE
 from apps.skills.enums import StatusChoices, VisibilityChoices
 
 
@@ -168,6 +169,11 @@ class SkillDiscoveryEmbedding(BaseModel):
                 ef_construction=64,
                 opclasses=["vector_cosine_ops"],
             ),
+            GinIndex(
+                fields=["indexed_text"],
+                name="idx_skill_disc_trgm",
+                opclasses=["gin_trgm_ops"],
+            ),
         ]
 
     def __str__(self):
@@ -230,7 +236,7 @@ class SkillExecutionSpec(BaseModel):
     allowed_egress = models.JSONField(default=list, blank=True)
     timeout_seconds = models.PositiveIntegerField(default=30)
     memory_mb = models.PositiveIntegerField(default=512)
-    max_output_bytes_inline = models.PositiveIntegerField(default=32768)
+    max_output_bytes_inline = models.PositiveIntegerField(default=MAX_OUTPUT_BYTES_INLINE)
     max_runs_per_day = models.PositiveIntegerField(default=100)
     max_concurrent_runs = models.PositiveIntegerField(default=1)
 
@@ -444,6 +450,7 @@ class SkillSecretValue(BaseModel):
     wrapped_dek = models.BinaryField(default=b"")
     ciphertext = models.BinaryField(default=b"")
     kms_key_version = models.CharField(max_length=255, blank=True, default="")
+    vault_ref = models.CharField(max_length=512, blank=True, default="")
     last_set_by = models.ForeignKey(
         "accounts.User",
         null=True,

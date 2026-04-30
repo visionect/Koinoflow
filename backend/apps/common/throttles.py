@@ -65,3 +65,8 @@ class WebhookThrottle(AnonRateThrottle):
 # AI / connector extraction — expensive (money + external quota)
 class AiExtractionThrottle(AuthRateThrottle):
     scope = "ai_extraction"
+
+
+# Execution callbacks / secrets — called from Cloud Run Jobs (anonymous bearer)
+class ExecutionCallbackThrottle(AnonRateThrottle):
+    scope = "execution_callback"

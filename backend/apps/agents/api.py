@@ -184,7 +184,13 @@ def _ensure_agents_department(workspace):
 
 
 def _agent_skill_out(skill: Skill):
-    deployments = list(skill.agent_deployments.select_related("agent"))
+    # Use prefetched data if available (from prefetch_related in the caller),
+    # otherwise fetch to avoid N+1 queries.
+    _prefetched = getattr(skill, "_prefetched_objects_cache", {})
+    if "agent_deployments" in _prefetched:
+        deployments = list(_prefetched["agent_deployments"])
+    else:
+        deployments = list(skill.agent_deployments.all().select_related("agent"))
     deploy_to_all = any(d.deploy_to_all for d in deployments)
     return {
         "id": str(skill.id),

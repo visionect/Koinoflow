@@ -21,6 +21,7 @@ from apps.skills.models import (
     SkillSecretValue,
 )
 from apps.skills.secret_crypto import decrypt_secret_value
+from apps.skills.secret_vault import resolve_vault_ref
 
 RETENTION_DAYS = 30
 HIGH_APPROVAL_RISKS = {"high", "critical"}
@@ -276,10 +277,30 @@ def fetch_run_secret_values(run: SkillExecutionRun, allowed_names: list[str]) ->
                 raise HttpError(400, f"Missing required secret value: {ref.name}")
             continue
 
-        value = decrypt_secret_value(
-            wrapped_dek=bytes(row.wrapped_dek),
-            ciphertext=bytes(row.ciphertext),
-        )
+        try:
+            if row.vault_ref:
+                value = resolve_vault_ref(row.vault_ref)
+            else:
+                value = decrypt_secret_value(
+                    wrapped_dek=bytes(row.wrapped_dek),
+                    ciphertext=bytes(row.ciphertext),
+                )
+        except HttpError:
+            logs.append(
+                SkillSecretAccessLog(
+                    run=run,
+                    skill=run.skill,
+                    workspace=run.workspace,
+                    name=ref.name,
+                    granted=False,
+                    failure_reason="vault_unavailable" if row.vault_ref else "decrypt_failed",
+                )
+            )
+            if ref.required:
+                SkillSecretAccessLog.objects.bulk_create(logs)
+                raise
+            continue
+
         values[ref.name] = value
         logs.append(
             SkillSecretAccessLog(

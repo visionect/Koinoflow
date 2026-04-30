@@ -1,4 +1,5 @@
 import hashlib
+import re
 import secrets
 
 from django.db import models
@@ -207,8 +208,6 @@ def unique_slug(entity_type: str, slug: str, **scope):
     Return ``slug`` if available, otherwise append -{n} where n is one
     higher than the largest existing numeric suffix.
     """
-    import re
-
     from django.db.models import IntegerField, Max
     from django.db.models.functions import Cast, Substr
 
