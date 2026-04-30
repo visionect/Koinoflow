@@ -3,11 +3,18 @@ from pathlib import Path
 
 import dj_database_url
 from celery.schedules import crontab
+from cryptography.fernet import Fernet
 from decouple import config
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 SECRET_KEY = config("SECRET_KEY")
+if not SECRET_KEY or not str(SECRET_KEY).strip():
+    raise ImproperlyConfigured(
+        "SECRET_KEY is not set. Set the SECRET_KEY environment variable. "
+        'Example: python -c "import secrets; print(secrets.token_urlsafe(50))"'
+    )
 DEBUG = False
 ALLOWED_HOSTS = [h for h in config("ALLOWED_HOSTS", default="").split(",") if h]
 
@@ -355,4 +362,63 @@ NINJA_DEFAULT_THROTTLE_RATES = {
     "usage_log": "300/min",
     "import": "10/min",
     "connector_sync": "5/hour",
+    "execution_callback": "600/min",
 }
+
+
+# ── Critical settings validation ──────────────────────────────────────
+
+# Validate at import time so operators see configuration errors immediately
+# rather than at runtime when a feature is first exercised.
+
+
+def _validate_connector_encryption_key():
+    """Validate CONNECTOR_ENCRYPTION_KEY is a valid Fernet key (if non-empty)."""
+    from django.conf import settings as django_settings
+
+    key = getattr(django_settings, "CONNECTOR_ENCRYPTION_KEY", "")
+    if not key:
+        return
+    try:
+        Fernet(key.encode("utf-8"))
+    except Exception as exc:
+        raise ImproperlyConfigured(
+            "CONNECTOR_ENCRYPTION_KEY is not a valid Fernet base64-encoded key. "
+            "Generate one with:\n"
+            '    python -c "from cryptography.fernet import Fernet; '
+            'print(Fernet.generate_key().decode())"'
+        ) from exc
+
+
+def _validate_skill_execution_callback_secret():
+    """Validate SKILL_EXECUTION_CALLBACK_SECRET is configured and not falling back to SECRET_KEY."""
+    from django.conf import settings as django_settings
+
+    callback_secret = getattr(django_settings, "SKILL_EXECUTION_CALLBACK_SECRET", "")
+    secret_key = getattr(django_settings, "SECRET_KEY", "")
+    if not callback_secret:
+        raise ImproperlyConfigured(
+            "SKILL_EXECUTION_CALLBACK_SECRET is not configured. "
+            "Do not fall back to SECRET_KEY — use a dedicated, independently "
+            "rotated secret for execution callbacks."
+        )
+    if str(callback_secret) == str(secret_key):
+        raise ImproperlyConfigured(
+            "SKILL_EXECUTION_CALLBACK_SECRET must not be the same as SECRET_KEY. "
+            "Use a separate, independently rotated secret."
+        )
+
+
+def _validate_critical_settings():
+    """Run all critical settings validations.
+
+    This function is called by the Django startup check framework via
+    the ``check`` signal in apps.py. It can be overridden in local.py
+    for development environments where strict validation is undesirable.
+    """
+    _validate_connector_encryption_key()
+    _validate_skill_execution_callback_secret()
+
+
+# Store a flag so apps.py can conditionally skip validation in dev/test
+VALIDATE_CRITICAL_SETTINGS = True

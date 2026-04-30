@@ -129,6 +129,123 @@ All configuration is via environment variables. Copy `.env.example` to
 | `ENABLE_BILLING`          | `False`                | Turn on trial/subscription gating (hosted only)   |
 | `GOOGLE_OAUTH_CLIENT_ID`  | *(optional)*           | Google sign-in                                    |
 | `GITHUB_OAUTH_CLIENT_ID`  | *(optional)*           | GitHub sign-in                                    |
+| `CONNECTOR_ENCRYPTION_KEY`| *(required for connectors)* | Fernet key for connector credential encryption — generate with `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"` |
+| `SKILL_SECRET_KMS_KEY`    | *(optional)*           | Full GCP KMS key resource name for skill-secret envelope encryption; if unset, falls back to `CONNECTOR_ENCRYPTION_KEY` |
+
+## Skill secrets & trust model
+
+Executable skills can declare secrets they need (e.g. `OPENAI_API_KEY`,
+`SLACK_BOT_TOKEN`). Those values are stored in the database and injected
+into the skill executor's environment at run time. Here is the full
+picture of how they are protected and why you can trust the system.
+
+### Encryption at rest
+
+Secret values are **never stored in plaintext**. Koinoflow uses
+*envelope encryption*:
+
+1. A random 256-bit data-encryption key (DEK) is generated per secret
+   value.
+2. The DEK is used to Fernet-encrypt the plaintext value.
+3. The DEK itself is wrapped by either:
+   - **Google Cloud KMS** (hosted deployment and any self-hoster that
+     sets `SKILL_SECRET_KMS_KEY`) — the DEK ciphertext is stored in the
+     database; the raw key material never touches the database.
+   - **Fernet key** (fallback for self-hosters without KMS) — the entire
+     token is encrypted with the `CONNECTOR_ENCRYPTION_KEY` you
+     configure.
+
+Even if your database is compromised, no secret plaintext is recoverable
+without the KMS key or the Fernet master key.
+
+### Self-hosted deployments — you own the keys
+
+When you run Koinoflow on your own infrastructure:
+
+- **You control the database.** Encrypted values live only in your
+  Postgres instance.
+- **You control the encryption key.** Set `CONNECTOR_ENCRYPTION_KEY` to
+  a Fernet key you generate; it never leaves your environment.
+- **You control the KMS key.** Point `SKILL_SECRET_KMS_KEY` at a KMS key
+  in your own GCP project if you want hardware-backed key storage.
+
+There is no Visionect-controlled key material in self-hosted
+deployments. If you do not trust a hosted service, run it yourself —
+the Docker images and source code are public.
+
+### Hosted deployment (app.koinoflow.com)
+
+The hosted service uses Google Cloud KMS with customer-isolated key
+versions. Visionect's infrastructure is the trust boundary. We do not
+log or transmit plaintext secret values; they are decrypted only inside
+the skill executor process at run time.
+
+### Sandbox / test runs — ephemeral secret overrides
+
+The sandbox debugger lets you run a skill interactively without storing
+a secret permanently. When you execute a skill in sandbox mode you can
+supply **ephemeral secret overrides** for the current run:
+
+- Values are passed in the execute request body, injected into the
+  executor environment, and **never written to the database**.
+- The UI labels them clearly as "used for this run only, not saved".
+- Use a short-lived or scoped credential (e.g. an API key with read-only
+  access) so that even if the run output is captured it carries minimal
+  blast radius.
+
+### External vault references — we never see the secret
+
+Organizations that already manage secrets in their own vault can store
+a **vault reference** instead of the secret value. When you choose this
+option, Koinoflow stores only the reference string (e.g.
+`gcp-sm://my-project/my-secret`) — the actual secret never enters our
+database, our logs, or any backup.
+
+Concretely, this is what each party can see:
+
+| Observer                                     | What they see          |
+| -------------------------------------------- | ---------------------- |
+| Koinoflow operators (hosted) or you (self-hosted) | the reference string only |
+| An attacker who exfiltrates the database     | the reference string only |
+| The skill executor at run time               | the resolved value, in memory, for one run |
+
+The executor calls your vault directly using credentials you configure
+on the executor host (e.g. a GCP service account with
+`secretmanager.secretAccessor`). The plaintext is held in memory for the
+duration of one run and never written to Koinoflow's database.
+
+Supported reference schemes today:
+
+| Scheme    | Example                               | Resolves via                                       |
+| --------- | ------------------------------------- | -------------------------------------------------- |
+| `env://`  | `env://OPENAI_API_KEY`                | An env var on the executor process                 |
+| `gcp-sm://` | `gcp-sm://my-project/my-secret`     | Google Cloud Secret Manager (latest version)       |
+| `gcp-sm://` | `gcp-sm://my-project/my-secret@7`   | Google Cloud Secret Manager (pinned version)       |
+
+To store a vault reference instead of a value, send the reference in the
+`vault_ref` field when upserting a skill secret:
+
+```http
+PUT /api/v1/skills/{slug}/secrets/OPENAI_API_KEY
+Content-Type: application/json
+
+{ "vault_ref": "gcp-sm://my-project/openai-key" }
+```
+
+The list endpoint shows each secret's `kind` (`encrypted` or
+`vault_ref`) and, for vault references, the reference itself — so it's
+visible at a glance which secrets Koinoflow holds and which live
+entirely outside our system.
+
+Additional providers (HashiCorp Vault, AWS Secrets Manager,
+Azure Key Vault) are planned; track progress in
+[GitHub Issues](https://github.com/visionect/Koinoflow/issues).
+
+### Access logs
+
+Every secret read during a skill execution is recorded in
+`skill_secret_access_log`. Workspace admins can audit which secrets were
+accessed, by whom, and during which run.
 
 ## Self-hosting with pre-built images
 

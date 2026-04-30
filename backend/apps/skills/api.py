@@ -30,6 +30,7 @@ from apps.accounts.permissions import (
 )
 from apps.common.throttles import (
     CreateAuthThrottle,
+    ExecutionCallbackThrottle,
     ImportThrottle,
     MutationThrottle,
     ReadThrottle,
@@ -76,7 +77,12 @@ from apps.skills.models import (
     SkillVersion,
     VersionFile,
 )
+from apps.skills.sanitize import (
+    sanitize_content_md,
+    sanitize_frontmatter,
+)
 from apps.skills.secret_crypto import encrypt_secret_value
+from apps.skills.secret_vault import parse_vault_ref
 
 logger = logging.getLogger(__name__)
 
@@ -362,6 +368,8 @@ class SkillSecretStatusOut(Schema):
     required: bool
     description: str
     is_set: bool
+    kind: str | None = None
+    vault_ref: str | None = None
     last_set_at: str | None
     last_set_by: UserBriefOut | None
 
@@ -372,7 +380,8 @@ class SkillSecretListOut(Schema):
 
 
 class UpsertSkillSecretValueIn(Schema):
-    value: str = Field(min_length=1, max_length=10000)
+    value: str | None = Field(default=None, max_length=10000)
+    vault_ref: str | None = Field(default=None, max_length=512)
 
 
 class ExecutionSecretsFetchOut(Schema):
@@ -1123,11 +1132,19 @@ def _skill_secret_status_items(skill: Skill) -> list[dict]:
                 "required": bool(ref.required),
                 "description": ref.description or "",
                 "is_set": row is not None,
+                "kind": _secret_row_kind(row),
+                "vault_ref": (row.vault_ref or None) if row else None,
                 "last_set_at": row.updated_at.isoformat() if row else None,
                 "last_set_by": _user_brief(row.last_set_by) if row else None,
             }
         )
     return items
+
+
+def _secret_row_kind(row) -> str | None:
+    if row is None:
+        return None
+    return "vault_ref" if row.vault_ref else "encrypted"
 
 
 def _set_skill_shared_with(skill, dept_ids, workspace):
@@ -1899,18 +1916,41 @@ def upsert_skill_secret(
     except SkillSecretDeclaration.DoesNotExist:
         raise HttpError(404, "Secret declaration not found on this skill")
 
-    encrypted = encrypt_secret_value(payload.value)
+    has_value = payload.value is not None and payload.value != ""
+    has_ref = payload.vault_ref is not None and payload.vault_ref.strip() != ""
+    if has_value and has_ref:
+        raise HttpError(400, "Provide either 'value' or 'vault_ref', not both.")
+    if not has_value and not has_ref:
+        raise HttpError(
+            400,
+            "Provide one of 'value' (stored encrypted) or 'vault_ref' (external vault reference).",
+        )
+
+    setter = request.user if request.user.is_authenticated else None
+    if has_ref:
+        parsed = parse_vault_ref(payload.vault_ref)
+        defaults = {
+            "wrapped_dek": b"",
+            "ciphertext": b"",
+            "kms_key_version": "",
+            "vault_ref": str(parsed),
+            "last_set_by": setter,
+        }
+    else:
+        encrypted = encrypt_secret_value(payload.value)
+        defaults = {
+            "wrapped_dek": encrypted.wrapped_dek,
+            "ciphertext": encrypted.ciphertext,
+            "kms_key_version": encrypted.kms_key_version,
+            "vault_ref": "",
+            "last_set_by": setter,
+        }
     row, _created = SkillSecretValue.objects.update_or_create(
         skill=skill,
         workspace=skill.department.team.workspace,
         name=ref.name,
         scope=ref.scope,
-        defaults={
-            "wrapped_dek": encrypted.wrapped_dek,
-            "ciphertext": encrypted.ciphertext,
-            "kms_key_version": encrypted.kms_key_version,
-            "last_set_by": request.user if request.user.is_authenticated else None,
-        },
+        defaults=defaults,
     )
     return {
         "name": ref.name,
@@ -1918,6 +1958,8 @@ def upsert_skill_secret(
         "required": bool(ref.required),
         "description": ref.description or "",
         "is_set": True,
+        "kind": "vault_ref" if has_ref else "encrypted",
+        "vault_ref": row.vault_ref or None,
         "last_set_at": row.updated_at.isoformat(),
         "last_set_by": _user_brief(row.last_set_by),
     }
@@ -1954,7 +1996,7 @@ def delete_skill_secret(request, slug: str, name: str, system_kind: str | None =
     "/skill-executions/{run_id}/callback",
     response=SkillExecutionRunOut,
     auth=None,
-    throttle=[],
+    throttle=[ExecutionCallbackThrottle()],
 )
 def callback_skill_execution_run(request, run_id: str, payload: SkillExecutionCallbackIn):
     auth_header = request.headers.get("authorization", "")
@@ -1988,7 +2030,7 @@ def callback_skill_execution_run(request, run_id: str, payload: SkillExecutionCa
     "/skill-executions/{run_id}/secrets",
     response=ExecutionSecretsFetchOut,
     auth=None,
-    throttle=[],
+    throttle=[ExecutionCallbackThrottle()],
 )
 def fetch_skill_execution_secrets(request, run_id: str):
     from django.db import transaction
@@ -2494,8 +2536,8 @@ def create_version(request, slug: str, payload: CreateVersionIn, system_kind: st
         version = SkillVersion.objects.create(
             skill=skill,
             version_number=max_num + 1,
-            content_md=payload.content_md,
-            frontmatter_yaml=payload.frontmatter_yaml,
+            content_md=sanitize_content_md(payload.content_md),
+            frontmatter_yaml=sanitize_frontmatter(payload.frontmatter_yaml or ""),
             change_summary=payload.change_summary,
             authored_by=request.user if request.user.is_authenticated else None,
             koinoflow_metadata=metadata_dict,
@@ -3135,8 +3177,8 @@ def import_skill(request, slug: str, file: UploadedFile = File(...), system_kind
         version = SkillVersion.objects.create(
             skill=skill,
             version_number=max_num + 1,
-            content_md=content_md,
-            frontmatter_yaml=fm_yaml,
+            content_md=sanitize_content_md(content_md),
+            frontmatter_yaml=sanitize_frontmatter(fm_yaml),
             change_summary="Imported from skill file",
             authored_by=request.user if request.user.is_authenticated else None,
             koinoflow_metadata=imported_metadata or _empty_metadata_dict(),
