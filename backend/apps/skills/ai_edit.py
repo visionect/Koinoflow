@@ -33,10 +33,20 @@ SYSTEM_PROMPT = (
     "an instruction for how to change it. You may also receive: the skill's "
     "description, its declared input schema, and the most recent failed run's "
     "stderr / error.\n\n"
-    "Rewrite the file to satisfy the instruction. Preserve the file's "
-    "stdin → stdout JSON I/O contract: read JSON from stdin, write a JSON "
-    "object to stdout, write logs to stderr. Keep imports tidy; remove any you "
-    "stop using.\n\n"
+    "Rewrite the file to satisfy the instruction.\n\n"
+    "ENTRYPOINT CONTRACT — non-negotiable:\n"
+    "If the file you are editing is the skill entrypoint, the output MUST contain "
+    'a working `if __name__ == "__main__":` block that:\n'
+    "  1. Reads a JSON object from stdin:  data = json.load(sys.stdin)\n"
+    "  2. Does useful work with those inputs.\n"
+    "  3. Writes a JSON object to stdout as its final statement:  "
+    "json.dump(result, sys.stdout)\n"
+    "  4. Writes progress and diagnostic information to stderr.\n"
+    "If the entrypoint contract is already present, preserve it. "
+    "If it is missing or broken, add or fix it unconditionally — even if the "
+    "instruction does not mention it. A skill that does not write JSON to stdout "
+    "produces no output and every token spent generating it is wasted.\n\n"
+    "Keep imports tidy; remove any you stop using.\n\n"
     "OUTPUT RULES — read carefully:\n"
     "1. Output ONLY the complete new file contents. Nothing else.\n"
     "2. Do NOT wrap the output in ``` fences.\n"
@@ -56,12 +66,26 @@ def _build_user_prompt(
     input_schema: dict | None,
     recent_error: str | None,
     recent_logs: str | None,
+    entrypoint_path: str | None,
 ) -> str:
     parts: list[str] = []
     if skill_description:
         parts.append(f"# Skill description\n{skill_description.strip()}\n")
     if input_schema:
         parts.append(f"# Input schema\n```json\n{json.dumps(input_schema, indent=2)}\n```\n")
+    if entrypoint_path:
+        if file_path == entrypoint_path:
+            parts.append(
+                f"# Entrypoint\nThis file IS the skill entrypoint (`{entrypoint_path}`). "
+                'It must contain a working `if __name__ == "__main__":` block that reads '
+                "JSON from stdin and writes a JSON object to stdout.\n"
+            )
+        else:
+            parts.append(
+                f"# Entrypoint\nThe skill entrypoint is `{entrypoint_path}` (not this file). "
+                "Ensure your edits do not break any module-level API that the entrypoint "
+                "depends on.\n"
+            )
     if recent_error:
         parts.append(f"# Most recent error\n```\n{recent_error.strip()}\n```\n")
     if recent_logs:
@@ -119,6 +143,7 @@ def stream_ai_edit(
     input_schema: dict | None = None,
     recent_error: str | None = None,
     recent_logs: str | None = None,
+    entrypoint_path: str | None = None,
     model: str | None = None,
 ) -> Iterator[bytes]:
     """Yield SSE-encoded events as the model streams the rewrite."""
@@ -150,6 +175,7 @@ def stream_ai_edit(
         input_schema=input_schema,
         recent_error=recent_error,
         recent_logs=recent_logs,
+        entrypoint_path=entrypoint_path,
     )
 
     yield _sse(
