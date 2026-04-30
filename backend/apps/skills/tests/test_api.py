@@ -282,6 +282,85 @@ class TestSkillExecution:
         assert get_resp.status_code == 200
         assert get_resp.json()["skill_slug"] == "lookup"
 
+    def test_dispatch_failure_marks_run_failed_so_it_does_not_block_concurrency(
+        self, auth_client, admin_membership, settings, monkeypatch
+    ):
+        """Regression: a dispatch error must not leave the run stuck in QUEUED.
+
+        Before the fix, an HttpError raised from `_dispatch_cloud_run_job`
+        (e.g. missing entrypoint, GCS error, 4xx from Cloud Run) propagated
+        to the client but the run row stayed at QUEUED forever. That stuck
+        row tripped the per-skill concurrency check on every subsequent
+        request, so users were stuck behind 429s.
+        """
+        from ninja.errors import HttpError
+
+        settings.SKILL_EXECUTION_BACKEND = "cloud_run_jobs"
+        ws = admin_membership.workspace
+        team = TeamFactory(workspace=ws, slug="eng")
+        dept = DepartmentFactory(team=team, slug="ops")
+        skill = SkillFactory(department=dept, slug="brittle", status=StatusChoices.PUBLISHED)
+        version = SkillVersionFactory(
+            skill=skill,
+            version_number=1,
+            content_md="# Brittle",
+            koinoflow_metadata={"risk_level": "low", "requires_human_approval": False},
+        )
+        skill.current_version = version
+        skill.save()
+
+        resp = auth_client.patch(
+            "/api/v1/skills/brittle/execution",
+            data={
+                "enabled": True,
+                "runtime": "python",
+                "latency_class": "standard",
+                "entrypoint_path": "run.py",
+                "input_schema": {},
+                "output_schema": {},
+                "secrets_scope": "workspace",
+                "secret_refs": [],
+                "network": {"policy": "egress_allowlist", "allowed": []},
+                "limits": {
+                    "timeout_seconds": 30,
+                    "memory_mb": 512,
+                    "max_output_bytes_inline": 32768,
+                    "max_runs_per_day": 100,
+                    "max_concurrent_runs": 1,
+                },
+            },
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+
+        def fake_dispatch(run):
+            raise HttpError(400, "Execution entrypoint not found: run.py")
+
+        monkeypatch.setattr("apps.skills.api.dispatch_execution_run", fake_dispatch)
+
+        first_resp = auth_client.post(
+            "/api/v1/skills/brittle/execute",
+            data={"inputs": {}},
+            content_type="application/json",
+        )
+        assert first_resp.status_code == 400
+
+        stuck = SkillExecutionRun.objects.filter(skill=skill).order_by("-created_at").first()
+        assert stuck is not None
+        assert stuck.status == SkillExecutionRun.StatusChoices.FAILED
+        assert "entrypoint" in stuck.error_message.lower()
+        assert stuck.finished_at is not None
+
+        second_resp = auth_client.post(
+            "/api/v1/skills/brittle/execute",
+            data={"inputs": {}},
+            content_type="application/json",
+        )
+        assert second_resp.status_code == 400, (
+            "After fix the second attempt must NOT be blocked by a stuck QUEUED run; "
+            "it should fail with the same dispatch 400 (not 429 from concurrency)."
+        )
+
     def test_high_risk_execution_requires_approval(self, auth_client, admin_membership):
         ws = admin_membership.workspace
         team = TeamFactory(workspace=ws, slug="eng")
