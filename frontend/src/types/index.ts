@@ -533,6 +533,12 @@ export interface AgentSkill {
   updated_at: string
 }
 
+export interface SkillAgentDeployment {
+  skill_id: string
+  deploy_to_all: boolean
+  agent_ids: string[]
+}
+
 export interface AgentUsageEvent extends UsageEvent {
   agent_id: string | null
   agent_name: string | null

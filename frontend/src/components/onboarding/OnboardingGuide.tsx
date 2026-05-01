@@ -157,9 +157,16 @@ function CompletedCard({ onDismiss }: { onDismiss: () => void }) {
           <XIcon className="h-4 w-4" />
         </Button>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-2">
         <p className="text-sm text-muted-foreground">
           Your workspace is connected end to end. This guide will close shortly.
+        </p>
+        <p className="text-xs text-muted-foreground">
+          You can also explore{" "}
+          <span className="font-medium text-foreground">Agents</span> for dedicated AI
+          connections or the{" "}
+          <span className="font-medium text-foreground">Executable</span> tab on the
+          Skills page for sandboxed execution.
         </p>
       </CardContent>
     </>

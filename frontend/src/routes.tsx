@@ -21,7 +21,6 @@ import { McpPage } from "@/pages/settings/McpPage"
 import { CandidatesPage } from "@/pages/capture/CandidatesPage"
 import { ConnectorsPage } from "@/pages/settings/ConnectorsPage"
 import { MembersPage } from "@/pages/settings/MembersPage"
-import { SandboxPage } from "@/pages/sandbox/SandboxPage"
 import { SettingsPage } from "@/pages/settings/SettingsPage"
 import { TeamDetailPage } from "@/pages/teams/TeamDetailPage"
 import { TeamListPage } from "@/pages/teams/TeamListPage"
@@ -113,7 +112,7 @@ export function AppRoutes() {
           }
         />
         <Route path="usage" element={<UsageDashboardPage />} />
-        <Route path="sandbox" element={<SandboxPage />} />
+        <Route path="sandbox" element={<Navigate to="../skills?view=executable" replace />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/" replace />} />

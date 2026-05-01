@@ -51,6 +51,7 @@ import type {
   SkillExecutionSpec,
   SkillSecretStatus,
   SandboxOverview,
+  SkillAgentDeployment,
   SkillVersion,
   SkillVersionBrief,
   PromoteCandidateInput,
@@ -247,6 +248,8 @@ export const queryKeys = {
     executionRunLogs: (runId: string) => ["skills", "execution-run", runId, "logs"] as const,
     secrets: (slug: string, systemKind?: SkillSystemKind) =>
       ["skills", "secrets", slug, skillScopeKey(systemKind)] as const,
+    agentDeployment: (slug: string, systemKind?: SkillSystemKind) =>
+      ["skills", "agent-deployment", slug, skillScopeKey(systemKind)] as const,
   },
   settings: {
     effective: (teamId?: string, departmentId?: string) =>
@@ -740,6 +743,39 @@ export function useDeleteSkillSecret(slug: string, systemKind?: SkillSystemKind)
       }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: queryKeys.skills.secrets(slug, systemKind) })
+    },
+  })
+}
+
+export function useSkillAgentDeployment(slug: string | null | undefined, systemKind?: SkillSystemKind) {
+  return useQuery({
+    queryKey: queryKeys.skills.agentDeployment(slug ?? "", systemKind),
+    enabled: Boolean(slug),
+    queryFn: () =>
+      apiFetch<SkillAgentDeployment>(
+        `/skills/${slug}/agent-deployment${buildSkillScopeQuery(systemKind)}`,
+      ),
+  })
+}
+
+export function useUpdateSkillAgentDeployment(slug: string, systemKind?: SkillSystemKind) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (payload: { deploy_to_all: boolean; agent_ids: string[] }) =>
+      apiFetch<SkillAgentDeployment>(
+        `/skills/${slug}/agent-deployment${buildSkillScopeQuery(systemKind)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify(payload),
+        },
+      ),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.skills.agentDeployment(slug, systemKind),
+        }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.skills }),
+      ])
     },
   })
 }

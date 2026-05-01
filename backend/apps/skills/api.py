@@ -3216,3 +3216,86 @@ def import_skill(request, slug: str, file: UploadedFile = File(...), system_kind
             "version_number": version.version_number,
         },
     )
+
+
+# ── Skill-scoped agent deployment (works for any skill, not just agent-dept) ──
+
+
+class SkillAgentDeploymentOut(Schema):
+    skill_id: str
+    deploy_to_all: bool
+    agent_ids: list[str]
+
+
+class UpdateSkillAgentDeploymentIn(Schema):
+    deploy_to_all: bool = False
+    agent_ids: list[str] = []
+
+
+def _skill_agent_deployment_out(skill) -> dict:
+    from apps.agents.models import AgentSkillDeployment
+
+    deployments = list(AgentSkillDeployment.objects.filter(skill=skill).select_related("agent"))
+    deploy_to_all = any(d.deploy_to_all for d in deployments)
+    return {
+        "skill_id": str(skill.id),
+        "deploy_to_all": deploy_to_all,
+        "agent_ids": [str(d.agent_id) for d in deployments if d.agent_id],
+    }
+
+
+@router.get(
+    "/skills/{slug}/agent-deployment",
+    response=SkillAgentDeploymentOut,
+    auth=api_or_session,
+    throttle=[ReadThrottle()],
+)
+@require_role(RoleChoices.ADMIN)
+def get_skill_agent_deployment(request, slug: str, system_kind: str | None = ""):
+    skill = _get_skill(request, slug, system_kind=system_kind)
+    return _skill_agent_deployment_out(skill)
+
+
+@router.put(
+    "/skills/{slug}/agent-deployment",
+    response=SkillAgentDeploymentOut,
+    auth=api_or_session,
+    throttle=[MutationThrottle()],
+)
+@require_role(RoleChoices.ADMIN)
+def update_skill_agent_deployment(
+    request, slug: str, payload: UpdateSkillAgentDeploymentIn, system_kind: str | None = ""
+):
+    from django.db import transaction
+
+    from apps.agents.models import Agent, AgentSkillDeployment
+
+    skill = _get_skill(request, slug, system_kind=system_kind)
+
+    if not payload.deploy_to_all and not payload.agent_ids:
+        with transaction.atomic():
+            skill.agent_deployments.all().delete()
+        return _skill_agent_deployment_out(skill)
+
+    agents = []
+    if payload.agent_ids:
+        agents = list(
+            Agent.objects.filter(
+                id__in=payload.agent_ids,
+                workspace=request.workspace,
+                is_active=True,
+            )
+        )
+        if len(agents) != len(set(payload.agent_ids)):
+            raise HttpError(400, "One or more agent IDs are invalid")
+
+    with transaction.atomic():
+        skill.agent_deployments.all().delete()
+        if payload.deploy_to_all:
+            AgentSkillDeployment.objects.create(skill=skill, deploy_to_all=True)
+        elif agents:
+            AgentSkillDeployment.objects.bulk_create(
+                [AgentSkillDeployment(skill=skill, agent=agent) for agent in agents]
+            )
+
+    return _skill_agent_deployment_out(skill)
