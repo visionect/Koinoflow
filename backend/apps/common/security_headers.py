@@ -47,10 +47,28 @@ class SecurityHeadersMiddleware:
         self._csp = getattr(settings, "CONTENT_SECURITY_POLICY", _DEFAULT_CSP)
         self._permissions = getattr(settings, "PERMISSIONS_POLICY", _DEFAULT_PERMISSIONS_POLICY)
 
+    _DOCS_CSP = (
+        "default-src 'self'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'; "
+        "form-action 'self'; "
+        "object-src 'none'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "img-src 'self' data: blob: https://cdn.jsdelivr.net; "
+        "font-src 'self' data: https://cdn.jsdelivr.net; "
+        "connect-src 'self'; "
+        "upgrade-insecure-requests"
+    )
+
     def __call__(self, request):
         response = self.get_response(request)
+        path = request.path or ""
         if self._csp and "Content-Security-Policy" not in response:
-            response["Content-Security-Policy"] = self._csp
+            if path.startswith("/api/docs") or path == "/api/openapi.json":
+                response["Content-Security-Policy"] = self._DOCS_CSP
+            else:
+                response["Content-Security-Policy"] = self._csp
         if self._permissions and "Permissions-Policy" not in response:
             response["Permissions-Policy"] = self._permissions
         if "Referrer-Policy" not in response:
@@ -59,7 +77,6 @@ class SecurityHeadersMiddleware:
             response["Cross-Origin-Opener-Policy"] = "same-origin-allow-popups"
         if "X-Content-Type-Options" not in response:
             response["X-Content-Type-Options"] = "nosniff"
-        path = request.path or ""
         if path.startswith("/admin/"):
             response["X-Robots-Tag"] = "noindex, nofollow"
         return response
