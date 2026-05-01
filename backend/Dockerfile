@@ -13,6 +13,7 @@ COPY . .
 
 ENV DJANGO_SETTINGS_MODULE=config.settings.production
 ENV SECRET_KEY=build-time-secret
+ENV SKILL_EXECUTION_CALLBACK_SECRET=build-time-callback-secret
 ENV DATABASE_URL=postgres://koinoflow:koinoflow@localhost:5432/koinoflow
 ENV FRONTEND_URL=http://localhost:5173
 ENV PORT=8080
