@@ -574,6 +574,7 @@ def get_workspace(request, slug: str):
     response=OnboardingProgressOut,
     auth=api_or_session,
     throttle=[ReadThrottle()],
+    include_in_schema=False,
 )
 @require_role(RoleChoices.ADMIN)
 def get_onboarding_progress(request):
@@ -592,6 +593,7 @@ def get_onboarding_progress(request):
     response=OkOut,
     auth=api_or_session,
     throttle=[MutationThrottle()],
+    include_in_schema=False,
 )
 @require_role(RoleChoices.ADMIN)
 def update_onboarding_preference(request, payload: OnboardingPreferenceIn):

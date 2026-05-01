@@ -13,7 +13,14 @@ from apps.usage.api import router as usage_router
 api = NinjaAPI(
     title="Koinoflow API",
     version="1.0.0",
-    description="Skill management for AI agents",
+    description=(
+        "Koinoflow is a skill-management platform for AI agents. "
+        "Use this API to manage workspaces, teams, departments, skills, "
+        "versions, agents, and usage analytics.\n\n"
+        "**Authentication:** All endpoints (except `/health`) require either "
+        "a session cookie or an `Authorization: Bearer <api-key>` header. "
+        "Send `X-Workspace-Slug` to select the workspace context."
+    ),
     throttle=[
         GlobalAnonThrottle(),
         GlobalAuthThrottle(),
@@ -23,6 +30,7 @@ api = NinjaAPI(
 
 @api.get("/health", auth=None, tags=["health"])
 def health(request):
+    """Returns OK when the service is running."""
     return {"status": "ok"}
 
 
@@ -32,5 +40,5 @@ api.add_router("/v1/", api_keys_router)
 api.add_router("/v1/", agents_router)
 api.add_router("/v1/", skills_router)
 api.add_router("/v1/", usage_router)
-api.add_router("/v1/", mcp_router)
-api.add_router("/v1/connectors/", connectors_router)
+api.add_router("/v1/", mcp_router, include_in_schema=False)
+api.add_router("/v1/connectors/", connectors_router, include_in_schema=False)
