@@ -1997,6 +1997,7 @@ def delete_skill_secret(request, slug: str, name: str, system_kind: str | None =
     response=SkillExecutionRunOut,
     auth=None,
     throttle=[ExecutionCallbackThrottle()],
+    include_in_schema=False,
 )
 def callback_skill_execution_run(request, run_id: str, payload: SkillExecutionCallbackIn):
     auth_header = request.headers.get("authorization", "")
@@ -2031,6 +2032,7 @@ def callback_skill_execution_run(request, run_id: str, payload: SkillExecutionCa
     response=ExecutionSecretsFetchOut,
     auth=None,
     throttle=[ExecutionCallbackThrottle()],
+    include_in_schema=False,
 )
 def fetch_skill_execution_secrets(request, run_id: str):
     from django.db import transaction
@@ -2248,6 +2250,7 @@ def cancel_skill_execution_run(request, run_id: str):
     response=SandboxOverviewOut,
     auth=api_or_session,
     throttle=[ReadThrottle()],
+    include_in_schema=False,
 )
 def sandbox_overview(request):
     workspace = request.workspace
@@ -2350,6 +2353,7 @@ def sandbox_overview(request):
     "/skills/{slug}/versions/{version_number}/files/{path}/ai-edit",
     auth=api_or_session,
     throttle=[MutationThrottle()],
+    include_in_schema=False,
 )
 @require_role(RoleChoices.ADMIN, RoleChoices.TEAM_MANAGER, RoleChoices.MEMBER)
 def stream_skill_file_ai_edit(

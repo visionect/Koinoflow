@@ -13,7 +13,14 @@ from apps.usage.api import router as usage_router
 api = NinjaAPI(
     title="Koinoflow API",
     version="1.0.0",
-    description="Skill management for AI agents",
+    description=(
+        "Koinoflow is a skill-management platform for AI agents. "
+        "Use this API to manage workspaces, teams, departments, skills, "
+        "versions, agents, and usage analytics.\n\n"
+        "**Authentication:** All endpoints (except `/health`) require either "
+        "a session cookie or an `Authorization: Bearer <api-key>` header. "
+        "Send `X-Workspace-Slug` to select the workspace context."
+    ),
     throttle=[
         GlobalAnonThrottle(),
         GlobalAuthThrottle(),
@@ -23,6 +30,7 @@ api = NinjaAPI(
 
 @api.get("/health", auth=None, tags=["health"])
 def health(request):
+    """Returns OK when the service is running."""
     return {"status": "ok"}
 
 
@@ -34,3 +42,16 @@ api.add_router("/v1/", skills_router)
 api.add_router("/v1/", usage_router)
 api.add_router("/v1/", mcp_router)
 api.add_router("/v1/connectors/", connectors_router)
+
+
+def _hide_router_from_schema(router):
+    # django-ninja 1.x has no router-level `include_in_schema` flag, so we
+    # toggle each operation after registration to keep internal routers out
+    # of the public OpenAPI document.
+    for path_view in router.path_operations.values():
+        for operation in path_view.operations:
+            operation.include_in_schema = False
+
+
+_hide_router_from_schema(mcp_router)
+_hide_router_from_schema(connectors_router)

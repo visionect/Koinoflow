@@ -224,6 +224,7 @@ jobs:
           backend_env_vars+=",SKILL_EXECUTION_CLOUD_RUN_JOB=${SKILL_EXECUTOR_JOB}"
           backend_env_vars+=",SKILL_EXECUTION_RUNS_BUCKET=${SKILL_RUNS_BUCKET}"
           backend_env_vars+=",SKILL_EXECUTION_PUBLIC_BASE_URL=https://app.koinoflow.com"
+          backend_env_vars+=",ENABLE_BILLING=True"
 
           gcloud run services update "${BACKEND_SERVICE}" \
             --project="${PROJECT_ID}" \
