@@ -40,5 +40,18 @@ api.add_router("/v1/", api_keys_router)
 api.add_router("/v1/", agents_router)
 api.add_router("/v1/", skills_router)
 api.add_router("/v1/", usage_router)
-api.add_router("/v1/", mcp_router, include_in_schema=False)
-api.add_router("/v1/connectors/", connectors_router, include_in_schema=False)
+api.add_router("/v1/", mcp_router)
+api.add_router("/v1/connectors/", connectors_router)
+
+
+def _hide_router_from_schema(router):
+    # django-ninja 1.x has no router-level `include_in_schema` flag, so we
+    # toggle each operation after registration to keep internal routers out
+    # of the public OpenAPI document.
+    for path_view in router.path_operations.values():
+        for operation in path_view.operations:
+            operation.include_in_schema = False
+
+
+_hide_router_from_schema(mcp_router)
+_hide_router_from_schema(connectors_router)
