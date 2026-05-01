@@ -44,14 +44,20 @@ ONBOARDING_STEPS: list[tuple[int, str, str, str, str]] = [
         4,
         "skill",
         "Publish a skill",
-        "Draft and publish a skill so people and AI clients can read it. You can also make skills executable or deploy them to agents later.",
+        (
+            "Draft and publish a skill so people and AI clients can read it. "
+            "You can also make skills executable or deploy them to agents later."
+        ),
         "/skills",
     ),
     (
         5,
         "mcp_client",
         "Connect an AI client",
-        "Connect Cursor, Claude, or another MCP client so it can discover your skills. You can also set up dedicated agents from the Agents page.",
+        (
+            "Connect Cursor, Claude, or another MCP client so it can discover your skills. "
+            "You can also set up dedicated agents from the Agents page."
+        ),
         "/settings/mcp",
     ),
     (

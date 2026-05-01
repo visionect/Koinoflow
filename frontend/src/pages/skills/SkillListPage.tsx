@@ -11,7 +11,6 @@ import {
   PlusIcon,
   SearchIcon,
   ShieldCheckIcon,
-  SlidersHorizontalIcon,
   UploadIcon,
 } from "lucide-react"
 import { Link, useParams, useSearchParams } from "react-router-dom"

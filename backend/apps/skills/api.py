@@ -3266,9 +3266,9 @@ def get_skill_agent_deployment(request, slug: str, system_kind: str | None = "")
 def update_skill_agent_deployment(
     request, slug: str, payload: UpdateSkillAgentDeploymentIn, system_kind: str | None = ""
 ):
-    from apps.agents.models import Agent, AgentSkillDeployment
-
     from django.db import transaction
+
+    from apps.agents.models import Agent, AgentSkillDeployment
 
     skill = _get_skill(request, slug, system_kind=system_kind)
 
