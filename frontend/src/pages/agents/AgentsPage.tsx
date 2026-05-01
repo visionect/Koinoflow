@@ -60,6 +60,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 
 function slugify(value: string) {
@@ -265,46 +266,13 @@ function CreateAgentSkillDialog({
             />
           </div>
 
-          <div className="rounded-lg border p-3">
-            <div className="flex items-start gap-3">
-              <Checkbox
-                id="create-deploy-all"
-                checked={deployToAll}
-                onCheckedChange={(checked) => setDeployToAll(Boolean(checked))}
-              />
-              <div>
-                <Label htmlFor="create-deploy-all">Deploy to all agents</Label>
-                <p className="text-sm text-muted-foreground">
-                  New and existing agents will be able to retrieve this skill.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {!deployToAll && (
-            <div className="space-y-2">
-              <Label>Select agents</Label>
-              <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border p-3">
-                {agents.map((agent) => (
-                  <label
-                    key={agent.id}
-                    className="flex items-start gap-3 rounded-md p-2 hover:bg-muted/50"
-                  >
-                    <Checkbox
-                      checked={selectedAgentIds.has(agent.id)}
-                      onCheckedChange={(checked) => toggleAgent(agent.id, Boolean(checked))}
-                    />
-                    <span>
-                      <span className="block text-sm font-medium">{agent.name}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {agent.masked_token}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
+          <AgentSelector
+            agents={agents}
+            deployToAll={deployToAll}
+            selectedAgentIds={selectedAgentIds}
+            onDeployToAllChange={setDeployToAll}
+            onToggleAgent={toggleAgent}
+          />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -413,46 +381,13 @@ function ImportAgentSkillDialog({
             </div>
           </div>
 
-          <div className="rounded-lg border p-3">
-            <div className="flex items-start gap-3">
-              <Checkbox
-                id="deploy-all"
-                checked={deployToAll}
-                onCheckedChange={(checked) => setDeployToAll(Boolean(checked))}
-              />
-              <div>
-                <Label htmlFor="deploy-all">Deploy to all agents</Label>
-                <p className="text-sm text-muted-foreground">
-                  New and existing agents will be able to retrieve this skill.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {!deployToAll && (
-            <div className="space-y-2">
-              <Label>Select agents</Label>
-              <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border p-3">
-                {agents.map((agent) => (
-                  <label
-                    key={agent.id}
-                    className="flex items-start gap-3 rounded-md p-2 hover:bg-muted/50"
-                  >
-                    <Checkbox
-                      checked={selectedAgentIds.has(agent.id)}
-                      onCheckedChange={(checked) => toggleAgent(agent.id, Boolean(checked))}
-                    />
-                    <span>
-                      <span className="block text-sm font-medium">{agent.name}</span>
-                      <span className="block text-xs text-muted-foreground">
-                        {agent.masked_token}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
+          <AgentSelector
+            agents={agents}
+            deployToAll={deployToAll}
+            selectedAgentIds={selectedAgentIds}
+            onDeployToAllChange={setDeployToAll}
+            onToggleAgent={toggleAgent}
+          />
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -464,6 +399,65 @@ function ImportAgentSkillDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function AgentSelector({
+  agents,
+  deployToAll,
+  selectedAgentIds,
+  onDeployToAllChange,
+  onToggleAgent,
+}: {
+  agents: Agent[]
+  deployToAll: boolean
+  selectedAgentIds: Set<string>
+  onDeployToAllChange: (v: boolean) => void
+  onToggleAgent: (id: string, checked: boolean) => void
+}) {
+  return (
+    <>
+      <div className="rounded-lg border p-3">
+        <div className="flex items-start gap-3">
+          <Checkbox
+            id="deploy-all"
+            checked={deployToAll}
+            onCheckedChange={(checked) => onDeployToAllChange(Boolean(checked))}
+          />
+          <div>
+            <Label htmlFor="deploy-all">Deploy to all agents</Label>
+            <p className="text-sm text-muted-foreground">
+              New and existing agents will be able to retrieve this skill.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {!deployToAll && (
+        <div className="space-y-2">
+          <Label>Select agents</Label>
+          <div className="max-h-56 space-y-2 overflow-y-auto rounded-lg border p-3">
+            {agents.map((agent) => (
+              <label
+                key={agent.id}
+                className="flex items-start gap-3 rounded-md p-2 hover:bg-muted/50"
+              >
+                <Checkbox
+                  checked={selectedAgentIds.has(agent.id)}
+                  onCheckedChange={(checked) => onToggleAgent(agent.id, Boolean(checked))}
+                />
+                <span>
+                  <span className="block text-sm font-medium">{agent.name}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {agent.masked_token}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
@@ -517,10 +511,10 @@ export function AgentsPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <PageHeader
         title="Agents"
-        description="Manage AI agents, their one-time connection tokens, agent-specific skills, and usage."
+        description="Manage AI agents, their connection tokens, agent-specific skills, and usage."
         action={
           <div className="flex gap-2">
             <DropdownMenu>
@@ -569,222 +563,233 @@ export function AgentsPage() {
         <Card>
           <CardHeader>
             <CardTitle>{skillsQuery.data?.length ?? 0}</CardTitle>
-            <CardDescription>Agent skills in hidden storage</CardDescription>
+            <CardDescription>Agent skills</CardDescription>
           </CardHeader>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Agent credentials</CardTitle>
-          <CardDescription>
-            Tokens are shown only on create or rotation. The table stores only the prefix.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {agentsQuery.isError ? (
-            <ErrorState
-              message={
-                agentsQuery.error instanceof Error
-                  ? agentsQuery.error.message
-                  : "Unable to load agents"
-              }
-              onRetry={() => void agentsQuery.refetch()}
-            />
-          ) : agentsQuery.data?.length ? (
-            <div className="overflow-hidden rounded-xl border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Token</TableHead>
-                    <TableHead>Last used</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {agentsQuery.data.map((agent) => (
-                    <TableRow key={agent.id}>
-                      <TableCell>
-                        <Link
-                          to={buildWorkspacePath(workspace, `/agents/${agent.id}`)}
-                          className="block hover:underline"
-                        >
-                          <div className="font-medium">{agent.name}</div>
-                          <div className="text-xs text-muted-foreground">{agent.description}</div>
-                        </Link>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{agent.masked_token}</TableCell>
-                      <TableCell>{formatRelativeDate(agent.last_used_at)}</TableCell>
-                      <TableCell>
-                        <Badge variant={agent.is_active ? "default" : "secondary"}>
-                          {agent.is_active ? "Active" : "Inactive"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="space-x-2 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => void handleRotate(agent)}
-                        >
-                          <RotateCwIcon aria-hidden />
-                          Rotate
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => void toggleAgent(agent)}>
-                          {agent.is_active ? "Deactivate" : "Activate"}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <EmptyState
-              title="No agents yet"
-              description="Create an agent to generate its one-time connection token."
-              action={
-                <Button onClick={() => setCreateAgentOpen(true)}>
-                  <KeyRoundIcon aria-hidden />
-                  Create agent
-                </Button>
-              }
-            />
-          )}
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="credentials">
+        <TabsList variant="line">
+          <TabsTrigger value="credentials">
+            <KeyRoundIcon className="size-3.5" />
+            Credentials
+          </TabsTrigger>
+          <TabsTrigger value="skills">Skills</TabsTrigger>
+          <TabsTrigger value="usage">Usage</TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Agent skills</CardTitle>
-          <CardDescription>
-            Skills created or imported from this tab are excluded from normal teams and analytics.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {skillsQuery.data?.length ? (
-            <div className="overflow-hidden rounded-xl border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Skill</TableHead>
-                    <TableHead>Deployment</TableHead>
-                    <TableHead>Updated</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {skillsQuery.data.map((skill) => (
-                    <TableRow key={skill.id}>
-                      <TableCell>
-                        <Link
-                          to={buildWorkspacePath(workspace, `/agents/skills/${skill.slug}`)}
-                          className="block hover:underline"
-                        >
-                          <div className="font-medium">{skill.title}</div>
-                          <div className="text-xs text-muted-foreground">{skill.slug}</div>
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        {skill.deploy_to_all
-                          ? "All agents"
-                          : `${skill.agent_ids.length} selected agents`}
-                      </TableCell>
-                      <TableCell>{formatRelativeDate(skill.updated_at)}</TableCell>
-                      <TableCell className="space-x-2 text-right">
-                        <Button asChild size="sm" variant="outline">
-                          <Link to={buildWorkspacePath(workspace, `/agents/skills/${skill.slug}`)}>
-                            <PencilIcon aria-hidden />
-                            Open editor
-                          </Link>
-                        </Button>
-                        <Button asChild size="sm" variant="ghost">
+        <TabsContent value="credentials">
+          <div className="space-y-4 pt-4">
+            <p className="text-sm text-muted-foreground">
+              Tokens are shown only on create or rotation. The table stores only the prefix.
+            </p>
+            {agentsQuery.isError ? (
+              <ErrorState
+                message={
+                  agentsQuery.error instanceof Error
+                    ? agentsQuery.error.message
+                    : "Unable to load agents"
+                }
+                onRetry={() => void agentsQuery.refetch()}
+              />
+            ) : agentsQuery.data?.length ? (
+              <div className="overflow-hidden rounded-xl border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Token</TableHead>
+                      <TableHead>Last used</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {agentsQuery.data.map((agent) => (
+                      <TableRow key={agent.id}>
+                        <TableCell>
                           <Link
-                            to={buildWorkspacePath(
-                              workspace,
-                              `/agents/skills/${skill.slug}/history`,
-                            )}
+                            to={buildWorkspacePath(workspace, `/agents/${agent.id}`)}
+                            className="block hover:underline"
                           >
-                            <HistoryIcon aria-hidden />
-                            History
+                            <div className="font-medium">{agent.name}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {agent.description}
+                            </div>
                           </Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <EmptyState
-              title="No agent skills"
-              description="Create from scratch or import a .skill file, then choose which agents receive it."
-              action={
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button>
-                      <PlusIcon aria-hidden />
-                      New skill
-                      <ChevronDownIcon className="ml-1 size-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="center">
-                    <DropdownMenuItem onClick={() => setCreateSkillOpen(true)}>
-                      <FilePlusIcon className="mr-2 size-4" />
-                      Create from scratch
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={openFilePicker}>
-                      <UploadIcon className="mr-2 size-4" />
-                      Import .skill file
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              }
-            />
-          )}
-        </CardContent>
-      </Card>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{agent.masked_token}</TableCell>
+                        <TableCell>{formatRelativeDate(agent.last_used_at)}</TableCell>
+                        <TableCell>
+                          <Badge variant={agent.is_active ? "default" : "secondary"}>
+                            {agent.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="space-x-2 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => void handleRotate(agent)}
+                          >
+                            <RotateCwIcon aria-hidden />
+                            Rotate
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => void toggleAgent(agent)}
+                          >
+                            {agent.is_active ? "Deactivate" : "Activate"}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <EmptyState
+                title="No agents yet"
+                description="Create an agent to generate its one-time connection token."
+                action={
+                  <Button onClick={() => setCreateAgentOpen(true)}>
+                    <KeyRoundIcon aria-hidden />
+                    Create agent
+                  </Button>
+                }
+              />
+            )}
+          </div>
+        </TabsContent>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Usage logs</CardTitle>
-          <CardDescription>
-            Agent activity is tracked separately from people-facing analytics.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {usageQuery.data?.items.length ? (
-            <div className="overflow-hidden rounded-xl border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Agent</TableHead>
-                    <TableHead>Skill</TableHead>
-                    <TableHead>Tool</TableHead>
-                    <TableHead>Called</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {usageQuery.data.items.map((event) => (
-                    <TableRow key={event.id}>
-                      <TableCell>{event.agent_name ?? "Unknown agent"}</TableCell>
-                      <TableCell>{event.skill_title}</TableCell>
-                      <TableCell>{event.tool_name || event.client_type}</TableCell>
-                      <TableCell>{formatRelativeDate(event.called_at)}</TableCell>
+        <TabsContent value="skills">
+          <div className="space-y-4 pt-4">
+            <p className="text-sm text-muted-foreground">
+              Agent-only skills live in hidden storage and are excluded from normal teams and
+              analytics.
+            </p>
+            {skillsQuery.data?.length ? (
+              <div className="overflow-hidden rounded-xl border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Skill</TableHead>
+                      <TableHead>Deployment</TableHead>
+                      <TableHead>Updated</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          ) : (
-            <EmptyState
-              title="No agent usage yet"
-              description="Agent MCP calls will appear here."
-            />
-          )}
-        </CardContent>
-      </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {skillsQuery.data.map((skill) => (
+                      <TableRow key={skill.id}>
+                        <TableCell>
+                          <Link
+                            to={buildWorkspacePath(workspace, `/agents/skills/${skill.slug}`)}
+                            className="block hover:underline"
+                          >
+                            <div className="font-medium">{skill.title}</div>
+                            <div className="text-xs text-muted-foreground">{skill.slug}</div>
+                          </Link>
+                        </TableCell>
+                        <TableCell>
+                          {skill.deploy_to_all
+                            ? "All agents"
+                            : `${skill.agent_ids.length} selected agents`}
+                        </TableCell>
+                        <TableCell>{formatRelativeDate(skill.updated_at)}</TableCell>
+                        <TableCell className="space-x-2 text-right">
+                          <Button asChild size="sm" variant="outline">
+                            <Link
+                              to={buildWorkspacePath(workspace, `/agents/skills/${skill.slug}`)}
+                            >
+                              <PencilIcon aria-hidden />
+                              Open editor
+                            </Link>
+                          </Button>
+                          <Button asChild size="sm" variant="ghost">
+                            <Link
+                              to={buildWorkspacePath(
+                                workspace,
+                                `/agents/skills/${skill.slug}/history`,
+                              )}
+                            >
+                              <HistoryIcon aria-hidden />
+                              History
+                            </Link>
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <EmptyState
+                title="No agent skills"
+                description="Create from scratch or import a .skill file, then choose which agents receive it."
+                action={
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button>
+                        <PlusIcon aria-hidden />
+                        New skill
+                        <ChevronDownIcon className="ml-1 size-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="center">
+                      <DropdownMenuItem onClick={() => setCreateSkillOpen(true)}>
+                        <FilePlusIcon className="mr-2 size-4" />
+                        Create from scratch
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={openFilePicker}>
+                        <UploadIcon className="mr-2 size-4" />
+                        Import .skill file
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                }
+              />
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="usage">
+          <div className="space-y-4 pt-4">
+            <p className="text-sm text-muted-foreground">
+              Agent activity is tracked separately from people-facing analytics.
+            </p>
+            {usageQuery.data?.items.length ? (
+              <div className="overflow-hidden rounded-xl border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Agent</TableHead>
+                      <TableHead>Skill</TableHead>
+                      <TableHead>Tool</TableHead>
+                      <TableHead>Called</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {usageQuery.data.items.map((event) => (
+                      <TableRow key={event.id}>
+                        <TableCell>{event.agent_name ?? "Unknown agent"}</TableCell>
+                        <TableCell>{event.skill_title}</TableCell>
+                        <TableCell>{event.tool_name || event.client_type}</TableCell>
+                        <TableCell>{formatRelativeDate(event.called_at)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <EmptyState
+                title="No agent usage yet"
+                description="Agent MCP calls will appear here."
+              />
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <CreateAgentDialog
         open={createAgentOpen}

@@ -3,6 +3,7 @@ import * as React from "react"
 import {
   AlertTriangleIcon,
   ArrowLeftIcon,
+  BotIcon,
   CheckCircle2Icon,
   ChevronDownIcon,
   Clock3Icon,
@@ -31,8 +32,10 @@ import {
   usePublishSkill,
   useReviewSkill,
   useSkills,
+  useSkillAgentDeployment,
   useUnshareSkillFromMyTeam,
   useUpdateAgentSkillDeployment,
+  useUpdateSkillAgentDeployment,
   useUpdateSkill,
   useUpdateVersionSummary,
   useVersion,
@@ -1322,6 +1325,13 @@ export function SkillViewPage() {
               </CardContent>
             </Card>
 
+            {!isAgentSkill && isAdmin ? (
+              <SkillAgentDeploymentCard
+                skillSlug={skillQuery.data.slug}
+                systemKind={skillSystemKind}
+              />
+            ) : null}
+
             <ExecutionSummaryCard
               skillSlug={skillQuery.data.slug}
               skillTitle={skillQuery.data.title}
@@ -1508,6 +1518,192 @@ export function SkillViewPage() {
         isAdmin={isAdmin}
       />
     </div>
+  )
+}
+
+function SkillAgentDeploymentCard({
+  skillSlug,
+  systemKind,
+}: {
+  skillSlug: string
+  systemKind?: SkillSystemKind
+}) {
+  const deploymentQuery = useSkillAgentDeployment(skillSlug, systemKind)
+  const agentsQuery = useAgents()
+  const updateDeployment = useUpdateSkillAgentDeployment(skillSlug, systemKind)
+
+  const [editing, setEditing] = React.useState(false)
+  const [deployToAll, setDeployToAll] = React.useState(false)
+  const [agentIds, setAgentIds] = React.useState<Set<string>>(new Set())
+
+  React.useEffect(() => {
+    if (deploymentQuery.data) {
+      setDeployToAll(deploymentQuery.data.deploy_to_all)
+      setAgentIds(new Set(deploymentQuery.data.agent_ids))
+    }
+  }, [deploymentQuery.data])
+
+  function toggleAgent(id: string, checked: boolean) {
+    setAgentIds((current) => {
+      const next = new Set(current)
+      if (checked) next.add(id)
+      else next.delete(id)
+      return next
+    })
+  }
+
+  async function handleSave() {
+    try {
+      await updateDeployment.mutateAsync({
+        deploy_to_all: deployToAll,
+        agent_ids: deployToAll ? [] : [...agentIds],
+      })
+      toast.success("Agent deployment updated")
+      setEditing(false)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update agent deployment")
+    }
+  }
+
+  function handleCancel() {
+    if (deploymentQuery.data) {
+      setDeployToAll(deploymentQuery.data.deploy_to_all)
+      setAgentIds(new Set(deploymentQuery.data.agent_ids))
+    }
+    setEditing(false)
+  }
+
+  const data = deploymentQuery.data
+  const hasDeployment = data && (data.deploy_to_all || data.agent_ids.length > 0)
+  const summary = data
+    ? data.deploy_to_all
+      ? "All agents"
+      : data.agent_ids.length > 0
+        ? `${data.agent_ids.length} selected agent${data.agent_ids.length === 1 ? "" : "s"}`
+        : "Not deployed to agents"
+    : null
+  const saveDisabled = updateDeployment.isPending
+
+  return (
+    <Card>
+      <CardHeader className="space-y-1 pb-3">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BotIcon className="size-4 text-primary" />
+              Agent deployment
+            </CardTitle>
+            <CardDescription>Make this skill available to AI agents.</CardDescription>
+          </div>
+          {hasDeployment ? (
+            <Badge variant="default">Deployed</Badge>
+          ) : (
+            <Badge variant="secondary">Not deployed</Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {!editing ? (
+          <div className="flex items-center justify-between">
+            <p className="text-sm">{summary ?? "Loading…"}</p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setEditing(true)}
+            >
+              <PencilIcon className="size-3" />
+              Edit
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="radio"
+                checked={!deployToAll && agentIds.size === 0}
+                onChange={() => {
+                  setDeployToAll(false)
+                  setAgentIds(new Set())
+                }}
+                className="mt-1"
+              />
+              <span>
+                <span className="block font-medium">Not deployed</span>
+                <span className="block text-xs text-muted-foreground">
+                  Agents cannot retrieve this skill.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="radio"
+                checked={deployToAll}
+                onChange={() => setDeployToAll(true)}
+                className="mt-1"
+              />
+              <span>
+                <span className="block font-medium">All agents</span>
+                <span className="block text-xs text-muted-foreground">
+                  Every agent in the workspace can retrieve this skill.
+                </span>
+              </span>
+            </label>
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="radio"
+                checked={!deployToAll && agentIds.size > 0}
+                onChange={() => setDeployToAll(false)}
+                className="mt-1"
+              />
+              <span>
+                <span className="block font-medium">Selected agents</span>
+                <span className="block text-xs text-muted-foreground">
+                  Pick which agents receive this skill.
+                </span>
+              </span>
+            </label>
+            {!deployToAll ? (
+              <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
+                {agentsQuery.data?.length ? (
+                  agentsQuery.data.map((agent) => (
+                    <label
+                      key={agent.id}
+                      className="flex items-start gap-2 rounded p-1.5 text-sm hover:bg-muted/50"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={agentIds.has(agent.id)}
+                        onChange={(e) => toggleAgent(agent.id, e.target.checked)}
+                        className="mt-1"
+                      />
+                      <span>
+                        <span className="block font-medium">{agent.name}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {agent.masked_token}
+                        </span>
+                      </span>
+                    </label>
+                  ))
+                ) : (
+                  <p className="px-1 py-2 text-xs text-muted-foreground">
+                    No agents yet. Create one from the Agents page.
+                  </p>
+                )}
+              </div>
+            ) : null}
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="ghost" onClick={handleCancel}>
+                Cancel
+              </Button>
+              <Button size="sm" disabled={saveDisabled} onClick={() => void handleSave()}>
+                {updateDeployment.isPending ? "Saving…" : "Save"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

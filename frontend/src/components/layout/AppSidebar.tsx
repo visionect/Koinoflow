@@ -8,7 +8,6 @@ import {
   PlugIcon,
   PlugZapIcon,
   SettingsIcon,
-  ShieldCheckIcon,
   SparklesIcon,
   UsersIcon,
 } from "lucide-react"
@@ -112,15 +111,6 @@ const AGENTS_LINKS = [
     tooltip: "Manage AI agents, agent skills, and agent usage.",
     icon: BotIcon,
     href: "/agents",
-  },
-]
-
-const SANDBOX_LINKS = [
-  {
-    label: "Sandbox",
-    tooltip: "Test, debug, and patch executable skills in isolation.",
-    icon: ShieldCheckIcon,
-    href: "/sandbox",
   },
 ]
 
@@ -287,24 +277,6 @@ export function AppSidebar() {
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Sandbox</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {SANDBOX_LINKS.map((item) => (
-                <SidebarMenuItem key={item.label}>
-                  <SidebarMenuButton asChild tooltip={item.tooltip ?? item.label}>
-                    <NavLink to={buildWorkspacePath(workspace, item.href)}>
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
