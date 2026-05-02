@@ -180,12 +180,14 @@ jobs:
 
           # Allow the backend runtime SA to execute the skill executor job.
           # roles/run.invoker grants `run.jobs.run` at the job resource level.
+          # NOTE: `gcloud run jobs add-iam-policy-binding` does not accept
+          # `--condition` (unlike the storage / run services variants), so it
+          # is intentionally omitted here.
           gcloud run jobs add-iam-policy-binding "${SKILL_EXECUTOR_JOB}" \
             --project="${PROJECT_ID}" \
             --region="${REGION}" \
             --member="serviceAccount:${BACKEND_RUNTIME_SERVICE_ACCOUNT}" \
             --role="roles/run.invoker" \
-            --condition=None \
             --quiet
 
           # Allow both the backend (uploads run artifacts) and the executor SA
