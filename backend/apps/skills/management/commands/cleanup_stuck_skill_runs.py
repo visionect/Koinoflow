@@ -80,24 +80,33 @@ class Command(BaseCommand):
             )
             for run in queued.values("id", "skill__slug", "created_at")[:50]:
                 self.stdout.write(
-                    f"  QUEUED  {run['id']}  skill={run['skill__slug']}  created={run['created_at']}"
+                    f"  QUEUED  {run['id']}  "
+                    f"skill={run['skill__slug']}  "
+                    f"created={run['created_at']}"
                 )
             for run in running.values("id", "skill__slug", "started_at")[:50]:
                 self.stdout.write(
-                    f"  RUNNING {run['id']}  skill={run['skill__slug']}  started={run['started_at']}"
+                    f"  RUNNING {run['id']}  "
+                    f"skill={run['skill__slug']}  "
+                    f"started={run['started_at']}"
                 )
             return
 
         queued_updated = queued.update(
             status=SkillExecutionRun.StatusChoices.FAILED,
-            error_message="Run was stuck in QUEUED and never dispatched. Cleared by cleanup_stuck_skill_runs.",
+            error_message=(
+                "Run was stuck in QUEUED and never dispatched. Cleared by cleanup_stuck_skill_runs."
+            ),
             started_at=now,
             finished_at=now,
             updated_at=now,
         )
         running_updated = running.update(
             status=SkillExecutionRun.StatusChoices.FAILED,
-            error_message="Run was stuck in RUNNING past its expected window. Cleared by cleanup_stuck_skill_runs.",
+            error_message=(
+                "Run was stuck in RUNNING past its expected window. "
+                "Cleared by cleanup_stuck_skill_runs."
+            ),
             finished_at=now,
             updated_at=now,
         )
