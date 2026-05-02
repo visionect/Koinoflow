@@ -82,7 +82,7 @@ export function AgentDetailPage() {
   const updateAgent = useUpdateAgent()
   const rotateToken = useRotateAgentToken()
   const [rotatedAgent, setRotatedAgent] = React.useState<CreatedAgent | null>(null)
-  const removeSkillMutation = useRemoveSkillFromAgent("")
+  const removeSkillMutation = useRemoveSkillFromAgent()
   const [removingSkill, setRemovingSkill] = React.useState<{ slug: string; title: string } | null>(
     null,
   )
@@ -91,6 +91,15 @@ export function AgentDetailPage() {
     () => agentsQuery.data?.find((item) => item.id === agentId),
     [agentId, agentsQuery.data],
   )
+
+  const otherActiveAgentIds = React.useMemo(
+    () =>
+      (agentsQuery.data ?? [])
+        .filter((a) => a.id !== agentId && a.is_active)
+        .map((a) => a.id),
+    [agentId, agentsQuery.data],
+  )
+
   const deployedSkills = React.useMemo(
     () =>
       agentId ? (skillsQuery.data ?? []).filter((skill) => isDeployedToAgent(skill, agentId)) : [],
@@ -119,12 +128,21 @@ export function AgentDetailPage() {
     }
   }
 
-  async function handleRemoveSkill(_slug: string, skill: typeof deployedSkills[number]) {
+  async function handleRemoveSkill(slug: string, skill: typeof deployedSkills[number]) {
     if (!agentId) return
+    const currentAgentIds = skill.deploy_to_all ? otherActiveAgentIds : skill.agent_ids
+    if (skill.deploy_to_all && otherActiveAgentIds.length === 0) {
+      toast.error(
+        "This skill is deployed to all agents and there are no other active agents to keep. Add another agent or edit deployment on the skill page.",
+      )
+      setRemovingSkill(null)
+      return
+    }
     try {
       await removeSkillMutation.mutateAsync({
+        slug,
         agentId,
-        currentAgentIds: skill.agent_ids,
+        currentAgentIds,
       })
       toast.success(`${skill.title} removed from this agent`)
     } catch (error) {

@@ -1432,20 +1432,28 @@ export function useUpdateAgentSkillDeployment(slug: string) {
   })
 }
 
-export function useRemoveSkillFromAgent(slug: string) {
+export function useRemoveSkillFromAgent() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ agentId, currentAgentIds }: { agentId: string; currentAgentIds: string[] }) => {
+    mutationFn: ({
+      slug,
+      agentId,
+      currentAgentIds,
+    }: {
+      slug: string
+      agentId: string
+      currentAgentIds: string[]
+    }) => {
       const remainingAgents = currentAgentIds.filter((id) => id !== agentId)
-      return apiFetch<AgentSkill>(`/agents/skills/${slug}/deployment`, {
+      return apiFetch<AgentSkill>(`/agents/skills/${encodeURIComponent(slug)}/deployment`, {
         method: "PUT",
         body: JSON.stringify({ deploy_to_all: false, agent_ids: remainingAgents }),
       })
     },
-    onSuccess: async () => {
+    onSuccess: async (_, variables) => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.agents.skills }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.agents.deployment(slug) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.agents.deployment(variables.slug) }),
       ])
     },
   })
