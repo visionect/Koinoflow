@@ -48,6 +48,7 @@ from apps.skills.discovery import (
 )
 from apps.skills.enums import StatusChoices, VisibilityChoices
 from apps.skills.execution import (
+    TERMINAL_STATUSES,
     apply_execution_callback,
     canonical_input_hash,
     dispatch_execution_run,
@@ -1750,6 +1751,36 @@ def _caller_type(request) -> str:
     return SkillExecutionRun.CallerTypeChoices.USER
 
 
+def _mark_run_failed_after_dispatch_error(run: SkillExecutionRun, exc: BaseException) -> None:
+    """Flip the run to FAILED so it stops blocking concurrency / quota.
+
+    `dispatch_execution_run` may raise after the run row has been created
+    (e.g. missing entrypoint, GCS upload error, Cloud Run API error). Without
+    this safety net the run sits in QUEUED forever and prevents new runs
+    from being accepted.
+    """
+    run.refresh_from_db()
+    if run.status in TERMINAL_STATUSES:
+        return
+
+    message = getattr(exc, "message", None) or str(exc) or exc.__class__.__name__
+    now = timezone.now()
+    run.status = SkillExecutionRun.StatusChoices.FAILED
+    run.error_message = (message or "Dispatch failed")[:4000]
+    if run.started_at is None:
+        run.started_at = now
+    run.finished_at = now
+    run.save(
+        update_fields=[
+            "status",
+            "error_message",
+            "started_at",
+            "finished_at",
+            "updated_at",
+        ]
+    )
+
+
 @router.get(
     "/skills/{slug}/execution",
     response=SkillExecutionSpecOut,
@@ -1868,7 +1899,11 @@ def execute_skill(
     )
 
     if status != SkillExecutionRun.StatusChoices.PENDING_APPROVAL:
-        dispatch_execution_run(run)
+        try:
+            dispatch_execution_run(run)
+        except Exception as exc:
+            _mark_run_failed_after_dispatch_error(run, exc)
+            raise
 
     run = SkillExecutionRun.objects.select_related("skill", "version", "agent", "user").get(
         pk=run.pk

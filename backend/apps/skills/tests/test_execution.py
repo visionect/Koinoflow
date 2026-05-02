@@ -1,8 +1,11 @@
 import json
 import zipfile
+from datetime import timedelta
 from io import BytesIO
 
 import pytest
+from django.core.management import call_command
+from django.utils import timezone
 
 from apps.skills.enums import StatusChoices
 from apps.skills.execution import issue_callback_token
@@ -231,3 +234,86 @@ class TestExecutionConcurrency:
             content_type="application/json",
         )
         assert resp.status_code == 429
+
+
+@pytest.mark.django_db
+class TestCleanupStuckSkillRuns:
+    def _make_run(self, admin_membership, *, status, age_minutes, started=False):
+        skill = SkillFactory(
+            department__team__workspace=admin_membership.workspace,
+            status=StatusChoices.PUBLISHED,
+        )
+        version = SkillVersionFactory(skill=skill, version_number=1)
+        skill.current_version = version
+        skill.save()
+        spec = SkillExecutionSpec.objects.create(skill=skill, version=version)
+        run = SkillExecutionRun.objects.create(
+            workspace=admin_membership.workspace,
+            skill=skill,
+            version=version,
+            spec=spec,
+            department=skill.department,
+            caller_type=SkillExecutionRun.CallerTypeChoices.USER,
+            status=status,
+            inputs={},
+            input_hash="a" * 64,
+        )
+        old = timezone.now() - timedelta(minutes=age_minutes)
+        SkillExecutionRun.objects.filter(pk=run.pk).update(
+            created_at=old,
+            started_at=old if started else None,
+        )
+        run.refresh_from_db()
+        return run
+
+    def test_marks_old_queued_runs_as_failed(self, admin_membership):
+        old_queued = self._make_run(
+            admin_membership,
+            status=SkillExecutionRun.StatusChoices.QUEUED,
+            age_minutes=60,
+        )
+        recent_queued = self._make_run(
+            admin_membership,
+            status=SkillExecutionRun.StatusChoices.QUEUED,
+            age_minutes=2,
+        )
+
+        call_command("cleanup_stuck_skill_runs")
+
+        old_queued.refresh_from_db()
+        recent_queued.refresh_from_db()
+        assert old_queued.status == SkillExecutionRun.StatusChoices.FAILED
+        assert "stuck" in old_queued.error_message.lower()
+        assert old_queued.finished_at is not None
+        assert recent_queued.status == SkillExecutionRun.StatusChoices.QUEUED
+
+    def test_dry_run_does_not_modify(self, admin_membership):
+        run = self._make_run(
+            admin_membership,
+            status=SkillExecutionRun.StatusChoices.QUEUED,
+            age_minutes=60,
+        )
+
+        call_command("cleanup_stuck_skill_runs", "--dry-run")
+
+        run.refresh_from_db()
+        assert run.status == SkillExecutionRun.StatusChoices.QUEUED
+
+    def test_filters_by_skill_slug(self, admin_membership):
+        target = self._make_run(
+            admin_membership,
+            status=SkillExecutionRun.StatusChoices.QUEUED,
+            age_minutes=60,
+        )
+        other = self._make_run(
+            admin_membership,
+            status=SkillExecutionRun.StatusChoices.QUEUED,
+            age_minutes=60,
+        )
+
+        call_command("cleanup_stuck_skill_runs", f"--skill-slug={target.skill.slug}")
+
+        target.refresh_from_db()
+        other.refresh_from_db()
+        assert target.status == SkillExecutionRun.StatusChoices.FAILED
+        assert other.status == SkillExecutionRun.StatusChoices.QUEUED

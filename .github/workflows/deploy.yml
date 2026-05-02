@@ -19,6 +19,7 @@ env:
   ARTIFACT_REPOSITORY: koinoflow
   FRONTEND_BUCKET: gs://koinoflow-frontend
   BACKEND_SERVICE: koinoflow-backend
+  BACKEND_RUNTIME_SERVICE_ACCOUNT: koinoflow-backend@koinoflow-infra.iam.gserviceaccount.com
   MCP_SERVICE: koinoflow-mcp
   MIGRATION_JOB: koinoflow-migrate
   CLOUD_TASKS_QUEUE: koinoflow-tasks
@@ -177,8 +178,31 @@ jobs:
               --cpu=1
           fi
 
-          echo "::notice::Skill execution IAM must allow the backend runtime service account to run ${SKILL_EXECUTOR_JOB} and write ${SKILL_RUNS_BUCKET}."
-          echo "::notice::The executor service account ${SKILL_EXECUTOR_SERVICE_ACCOUNT} must be able to read/write ${SKILL_RUNS_BUCKET}."
+          # Allow the backend runtime SA to execute the skill executor job.
+          # roles/run.invoker grants `run.jobs.run` at the job resource level.
+          gcloud run jobs add-iam-policy-binding "${SKILL_EXECUTOR_JOB}" \
+            --project="${PROJECT_ID}" \
+            --region="${REGION}" \
+            --member="serviceAccount:${BACKEND_RUNTIME_SERVICE_ACCOUNT}" \
+            --role="roles/run.invoker" \
+            --condition=None \
+            --quiet
+
+          # Allow both the backend (uploads run artifacts) and the executor SA
+          # (reads inputs, writes outputs/logs) to read & write the runs bucket.
+          gcloud storage buckets add-iam-policy-binding "${SKILL_RUNS_BUCKET}" \
+            --project="${PROJECT_ID}" \
+            --member="serviceAccount:${BACKEND_RUNTIME_SERVICE_ACCOUNT}" \
+            --role="roles/storage.objectAdmin" \
+            --condition=None \
+            --quiet
+
+          gcloud storage buckets add-iam-policy-binding "${SKILL_RUNS_BUCKET}" \
+            --project="${PROJECT_ID}" \
+            --member="serviceAccount:${SKILL_EXECUTOR_SERVICE_ACCOUNT}" \
+            --role="roles/storage.objectAdmin" \
+            --condition=None \
+            --quiet
 
       - name: Deploy Cloud Run services
         run: |
