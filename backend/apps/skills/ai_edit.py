@@ -46,6 +46,18 @@ SYSTEM_PROMPT = (
     "If it is missing or broken, add or fix it unconditionally — even if the "
     "instruction does not mention it. A skill that does not write JSON to stdout "
     "produces no output and every token spent generating it is wasted.\n\n"
+    "CRITICAL — stdout/stderr separation (this is the #1 cause of skill failures):\n"
+    "  - stdout MUST contain ONLY a single valid JSON object. Nothing else.\n"
+    "  - NEVER use print() to write to stdout for any reason other than the final "
+    "JSON output. The executor parses the ENTIRE stdout as JSON — any extra text "
+    "will cause a parse error and the skill will fail.\n"
+    "  - For debugging, logging, or progress messages, ALWAYS use stderr instead:\n"
+    '      import sys; print("debug info", file=sys.stderr)\n'
+    "    or:\n"
+    '      import sys; sys.stderr.write("debug info\\n")\n'
+    '  - NEVER use print("hello world") or any bare print() in the entrypoint — '
+    "this writes to stdout and breaks the executor.\n"
+    "  - If you need to log something, write to stderr. Always.\n\n"
     "Keep imports tidy; remove any you stop using.\n\n"
     "OUTPUT RULES — read carefully:\n"
     "1. Output ONLY the complete new file contents. Nothing else.\n"
