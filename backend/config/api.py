@@ -8,6 +8,7 @@ from apps.connectors.api import router as connectors_router
 from apps.orgs.api import router as orgs_router
 from apps.orgs.api_keys import router as api_keys_router
 from apps.skills.api import router as skills_router
+from apps.skills.sandbox_analytics import router as sandbox_analytics_router
 from apps.usage.api import router as usage_router
 
 api = NinjaAPI(
@@ -42,6 +43,7 @@ api.add_router("/v1/", skills_router)
 api.add_router("/v1/", usage_router)
 api.add_router("/v1/", mcp_router)
 api.add_router("/v1/connectors/", connectors_router)
+api.add_router("/v1", sandbox_analytics_router)
 
 
 def _hide_router_from_schema(router):

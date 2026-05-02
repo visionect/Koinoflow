@@ -4,6 +4,7 @@ import {
   AlertTriangleIcon,
   ArrowDownIcon,
   ArrowUpIcon,
+  BugIcon,
   CheckCircle2Icon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -29,7 +30,13 @@ import {
   YAxis,
 } from "recharts"
 
-import { useUsageAnalytics, useUsageEvents, useUsageSummary } from "@/api/client"
+import { useUsageAnalytics, useUsageEvents, useUsageSummary, useSandboxAnalytics } from "@/api/client"
+import {
+  SandboxKpiStrip,
+  MostDebuggedSkillsWidget,
+  RunStatusBreakdownWidget,
+  DailyRunsTrendWidget,
+} from "./SandboxAnalyticsWidgets"
 import { ClientBadge } from "@/components/shared/ClientBadge"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { ErrorState } from "@/components/shared/ErrorState"
@@ -982,6 +989,7 @@ export function UsageDashboardPage() {
         <TabsList>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="activity">Activity Log</TabsTrigger>
+          <TabsTrigger value="sandbox">Sandbox</TabsTrigger>
         </TabsList>
 
         <TabsContent value="analytics" className="space-y-6 pt-4">
@@ -1078,7 +1086,71 @@ export function UsageDashboardPage() {
         <TabsContent value="activity" className="pt-4">
           <ActivityLogTab period={period} workspace={workspace} />
         </TabsContent>
+
+        <TabsContent value="sandbox" className="space-y-6 pt-4">
+          <SandboxTab period={period} workspace={workspace} />
+        </TabsContent>
       </Tabs>
+    </div>
+  )
+}
+
+// ── Sandbox Tab ────────────────────────────────────────────────────────
+
+function SandboxTab({ period, workspace: _workspace }: { period: number; workspace?: string | undefined }) {
+  void _workspace
+  const days = Math.max(period, 7)
+  const sandboxQuery = useSandboxAnalytics(days)
+
+  if (sandboxQuery.isError) {
+    return (
+      <ErrorState
+        message={
+          sandboxQuery.error instanceof Error
+            ? sandboxQuery.error.message
+            : "Unable to load sandbox analytics"
+        }
+        onRetry={() => {
+          void sandboxQuery.refetch()
+        }}
+      />
+    )
+  }
+
+  const data = sandboxQuery.data
+  const loading = sandboxQuery.isLoading
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <div className="rounded-lg bg-blue-500/10 p-2 text-blue-600 dark:text-blue-400">
+          <BugIcon className="size-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold">Sandbox Analytics</h2>
+          <p className="text-sm text-muted-foreground">
+            AI debugging activity and sandbox execution metrics
+          </p>
+        </div>
+      </div>
+
+      <SandboxKpiStrip kpis={data?.kpis} loading={loading} />
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        <DailyRunsTrendWidget
+          data={data?.daily_runs_trend ?? []}
+          loading={loading}
+        />
+        <RunStatusBreakdownWidget
+          breakdown={data?.run_status_breakdown}
+          loading={loading}
+        />
+      </div>
+
+      <MostDebuggedSkillsWidget
+        items={data?.most_debugged_skills ?? []}
+        loading={loading}
+      />
     </div>
   )
 }

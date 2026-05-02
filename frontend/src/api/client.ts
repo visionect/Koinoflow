@@ -51,6 +51,7 @@ import type {
   SkillExecutionSpec,
   SkillSecretStatus,
   SandboxOverview,
+  SandboxAnalyticsOut,
   SkillAgentDeployment,
   SkillVersion,
   SkillVersionBrief,
@@ -278,6 +279,7 @@ export const queryKeys = {
   },
   sandbox: {
     overview: ["sandbox", "overview"] as const,
+    analytics: (days: number) => ["sandbox", "analytics", days] as const,
   },
   onboarding: {
     progress: ["onboarding", "progress"] as const,
@@ -1671,5 +1673,12 @@ export function useDismissCandidate() {
         queryKey: queryKeys.connectors.candidates(credentialId),
       })
     },
+  })
+}
+
+export function useSandboxAnalytics(days = 7) {
+  return useQuery({
+    queryKey: queryKeys.sandbox.analytics(days),
+    queryFn: () => apiFetch<SandboxAnalyticsOut>(`/sandbox/analytics?days=${days}`),
   })
 }
