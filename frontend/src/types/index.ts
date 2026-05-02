@@ -858,3 +858,44 @@ export interface SkillFrontmatter {
   tags: string[]
   [key: string]: unknown
 }
+
+// ── Sandbox Analytics ──────────────────────────────────────────────────────
+
+export interface SandboxAnalyticsKpi {
+  adoption_rate: number
+  active_skills_count: number
+  total_runs_24h: number
+  total_runs_7d: number
+  ai_edit_success_rate: number
+  mean_time_to_fix_ms: number | null
+  debugger_sessions_count: number
+  mean_debugger_duration_ms: number | null
+}
+
+export interface MostDebuggedSkill {
+  skill_slug: string
+  skill_title: string
+  debugger_session_count: number
+  last_debugged_at: string | null
+  failure_count: number
+}
+
+export interface RunStatusBreakdown {
+  succeeded: number
+  failed: number
+  timeout: number
+  cancelled: number
+}
+
+export interface DailyRunTrend {
+  date: string
+  runs: number
+  failures: number
+}
+
+export interface SandboxAnalyticsOut {
+  kpis: SandboxAnalyticsKpi
+  most_debugged_skills: MostDebuggedSkill[]
+  run_status_breakdown: RunStatusBreakdown
+  daily_runs_trend: DailyRunTrend[]
+}
