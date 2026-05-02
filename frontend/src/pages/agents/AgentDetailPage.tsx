@@ -82,7 +82,7 @@ export function AgentDetailPage() {
   const updateAgent = useUpdateAgent()
   const rotateToken = useRotateAgentToken()
   const [rotatedAgent, setRotatedAgent] = React.useState<CreatedAgent | null>(null)
-  const [removeSkillMutation] = useRemoveSkillFromAgent("")
+  const removeSkillMutation = useRemoveSkillFromAgent("")
   const [removingSkill, setRemovingSkill] = React.useState<{ slug: string; title: string } | null>(
     null,
   )
@@ -119,7 +119,7 @@ export function AgentDetailPage() {
     }
   }
 
-  async function handleRemoveSkill(slug: string, skill: typeof deployedSkills[number]) {
+  async function handleRemoveSkill(_slug: string, skill: typeof deployedSkills[number]) {
     if (!agentId) return
     try {
       await removeSkillMutation.mutateAsync({
@@ -407,7 +407,8 @@ export function AgentDetailPage() {
               variant="destructive"
               disabled={removeSkillMutation.isPending}
               onClick={() => {
-                const skill = deployedSkills.find((s) => s.slug === removingSkill?.slug)
+                if (!removingSkill) return
+                const skill = deployedSkills.find((s) => s.slug === removingSkill.slug)
                 if (skill && agentId) {
                   void handleRemoveSkill(removingSkill.slug, skill)
                 }
