@@ -9,6 +9,7 @@ import {
   useAgentSkills,
   useAgentUsage,
   useAgents,
+  useRemoveSkillFromAgent,
   useRotateAgentToken,
   useUpdateAgent,
 } from "@/api/client"
@@ -21,6 +22,14 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
   Table,
   TableBody,
   TableCell,
@@ -28,6 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { Trash2 } from "lucide-react"
 
 function isDeployedToAgent(
   skill: { deploy_to_all: boolean; agent_ids: string[] },
@@ -72,6 +82,10 @@ export function AgentDetailPage() {
   const updateAgent = useUpdateAgent()
   const rotateToken = useRotateAgentToken()
   const [rotatedAgent, setRotatedAgent] = React.useState<CreatedAgent | null>(null)
+  const [removeSkillMutation] = useRemoveSkillFromAgent("")
+  const [removingSkill, setRemovingSkill] = React.useState<{ slug: string; title: string } | null>(
+    null,
+  )
 
   const agent = React.useMemo(
     () => agentsQuery.data?.find((item) => item.id === agentId),
@@ -102,6 +116,21 @@ export function AgentDetailPage() {
       toast.success(currentAgent.is_active ? "Agent deactivated" : "Agent activated")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update agent")
+    }
+  }
+
+  async function handleRemoveSkill(slug: string, skill: typeof deployedSkills[number]) {
+    if (!agentId) return
+    try {
+      await removeSkillMutation.mutateAsync({
+        agentId,
+        currentAgentIds: skill.agent_ids,
+      })
+      toast.success(`${skill.title} removed from this agent`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to remove skill")
+    } finally {
+      setRemovingSkill(null)
     }
   }
 
@@ -283,6 +312,15 @@ export function AgentDetailPage() {
                             History
                           </Link>
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setRemovingSkill({ slug: skill.slug, title: skill.title })}
+                        >
+                          <Trash2 aria-hidden />
+                          Remove
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -342,6 +380,44 @@ export function AgentDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={removingSkill !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemovingSkill(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove skill from agent</DialogTitle>
+            <DialogDescription>
+              This will remove {removingSkill?.title} from {agent?.name}. The skill will no longer
+              be available to this agent, but it will remain available to other agents if it is
+              deployed to them.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setRemovingSkill(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={removeSkillMutation.isPending}
+              onClick={() => {
+                const skill = deployedSkills.find((s) => s.slug === removingSkill?.slug)
+                if (skill && agentId) {
+                  void handleRemoveSkill(removingSkill.slug, skill)
+                }
+              }}
+            >
+              {removeSkillMutation.isPending ? "Removing..." : "Remove"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
