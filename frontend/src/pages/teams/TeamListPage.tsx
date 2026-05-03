@@ -130,7 +130,7 @@ export function TeamListPage() {
       )}
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Create team</DialogTitle>
             <DialogDescription>

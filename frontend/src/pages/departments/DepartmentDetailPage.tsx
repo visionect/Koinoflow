@@ -334,7 +334,7 @@ export function DepartmentDetailPage() {
       )}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Edit department</DialogTitle>
             <DialogDescription>Update ownership and naming for this department.</DialogDescription>
