@@ -242,12 +242,12 @@ export const AiSkillGenerator = React.forwardRef<
   const inactiveDisabled = !workspaceSlug || streaming
 
   return (
-    <div className="space-y-2 rounded-lg border bg-gradient-to-br from-violet-500/5 via-fuchsia-500/5 to-sky-500/5 p-3">
+    <div className="space-y-3 rounded-lg border bg-gradient-to-br from-violet-500/5 via-fuchsia-500/5 to-sky-500/5 p-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-xs font-medium">
-          <SparklesIcon className="size-3.5 text-violet-500" />
+        <div className="flex items-center gap-2 text-sm font-medium">
+          <SparklesIcon className="size-4 text-violet-500" />
           AI-assisted writing
-          <span className="rounded bg-background px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-muted-foreground">
+          <span className="rounded bg-background px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
             {model ?? "claude-sonnet-4-6"}
           </span>
         </div>
@@ -277,7 +277,7 @@ export const AiSkillGenerator = React.forwardRef<
       <Textarea
         value={instruction}
         onChange={(event) => setInstruction(event.target.value)}
-        rows={3}
+        rows={6}
         disabled={streaming}
         placeholder={
           `Describe the skill you want to create. Be specific about:\n` +
@@ -286,7 +286,7 @@ export const AiSkillGenerator = React.forwardRef<
           `• Any specific steps or error handling required`
         }
         className={cn(
-          "min-h-[100px] resize-none border-violet-500/30 bg-background text-xs",
+          "min-h-[140px] border-violet-500/30 bg-background text-sm leading-relaxed",
           streaming ? "opacity-70" : "",
         )}
         onKeyDown={(event) => {
@@ -298,7 +298,7 @@ export const AiSkillGenerator = React.forwardRef<
       />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-[10px] text-muted-foreground">
+        <span className="text-[11px] text-muted-foreground">
           ⌘/Ctrl + Enter to generate
         </span>
         <div className="flex items-center gap-1">

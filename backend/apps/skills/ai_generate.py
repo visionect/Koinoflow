@@ -7,10 +7,13 @@ a user's natural-language description, with per-workspace daily rate limiting.
 
 import json
 import logging
+import re
+import secrets
 from collections.abc import Iterator
 from typing import Any
 
 from django.conf import settings
+from django.utils.text import slugify
 
 from apps.connectors.capture.llm import (
     VERTEX_AUTH_SCOPE,
@@ -74,12 +77,20 @@ SYSTEM_PROMPT = (
 )
 
 
-def _build_user_prompt(description: str) -> str:
+def _build_user_prompt(instruction: str) -> str:
     return (
         f"Create a SKILL.md based on the following description:\n\n"
-        f"{description.strip()}\n\n"
+        f"{instruction.strip()}\n\n"
         f"Output the complete SKILL.md file. No fences, no prose."
     )
+
+
+def _draft_slug_from_instruction(instruction: str) -> str:
+    """Slug shown in the UI while streaming. Final slug is parsed from the
+    generated frontmatter on the client; this is just a stable placeholder."""
+    base = slugify(instruction)[:40].strip("-") or "ai-skill"
+    suffix = secrets.token_hex(2)
+    return re.sub(r"-+", "-", f"draft-{base}-{suffix}")
 
 
 def _sse(event: str, data: dict[str, Any]) -> bytes:
@@ -156,7 +167,7 @@ def record_usage(workspace, user) -> int:
 
 def stream_ai_generate(
     *,
-    description: str,
+    instruction: str,
     workspace,
     user=None,
     model: str | None = None,
@@ -187,13 +198,14 @@ def stream_ai_generate(
     if not chosen_model:
         chosen_model = DEFAULT_MODEL
 
-    user_prompt = _build_user_prompt(description)
+    user_prompt = _build_user_prompt(instruction)
 
     yield _sse(
         "start",
         {
             "model": chosen_model,
-            "description": description,
+            "skill_slug": _draft_slug_from_instruction(instruction),
+            "instruction": instruction,
             "remaining": limit_status["remaining"],
         },
     )
