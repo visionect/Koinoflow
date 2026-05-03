@@ -25,6 +25,46 @@ import {
 import { cn } from "@/lib/utils"
 import type { VersionFile, VersionFileInput } from "@/types"
 
+type FileTypeOption =
+  | "python"
+  | "markdown"
+  | "html"
+  | "yaml"
+  | "json"
+  | "javascript"
+  | "typescript"
+  | "shell"
+  | "text"
+
+const EXTENSION_TO_FILE_TYPE: Record<string, FileTypeOption> = {
+  ".py": "python",
+  ".md": "markdown",
+  ".html": "html",
+  ".htm": "html",
+  ".css": "html",
+  ".yaml": "yaml",
+  ".yml": "yaml",
+  ".json": "json",
+  ".js": "javascript",
+  ".jsx": "javascript",
+  ".ts": "typescript",
+  ".tsx": "typescript",
+  ".sh": "shell",
+  ".bash": "shell",
+  ".zsh": "shell",
+  ".bashrc": "shell",
+  ".bash_profile": "shell",
+}
+
+function inferFileTypeFromPath(filePath: string): FileTypeOption | null {
+  const lastDotIndex = filePath.lastIndexOf(".")
+  if (lastDotIndex === -1 || lastDotIndex === filePath.length - 1) {
+    return null
+  }
+  const extension = filePath.slice(lastDotIndex).toLowerCase()
+  return EXTENSION_TO_FILE_TYPE[extension] ?? null
+}
+
 type FileTreeBrowserProps =
   | {
       files: VersionFile[]
@@ -235,7 +275,7 @@ export function FileTreeBrowser(props: FileTreeBrowserProps) {
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set())
   const [showAddDialog, setShowAddDialog] = React.useState(false)
   const [newPath, setNewPath] = React.useState("")
-  const [newFileType, setNewFileType] = React.useState("text")
+  const [newFileType, setNewFileType] = React.useState<FileTypeOption>("text")
 
   React.useEffect(() => {
     setExpanded((prev) => {
@@ -249,6 +289,13 @@ export function FileTreeBrowser(props: FileTreeBrowserProps) {
       return next
     })
   }, [files])
+
+  React.useEffect(() => {
+    const inferred = inferFileTypeFromPath(newPath)
+    if (inferred) {
+      setNewFileType(inferred)
+    }
+  }, [newPath])
 
   const tree = React.useMemo(() => buildTree(files), [files])
 
