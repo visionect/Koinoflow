@@ -26,6 +26,8 @@ import { cn } from "@/lib/utils"
 import type { VersionFileDetail, VersionFileInput } from "@/types"
 
 import { AiEditPanel } from "./AiEditPanel"
+import { ExampleSkillsBrowser } from "@/components/skills/editor/ExampleSkillsBrowser"
+import { InlineTestPanel } from "./InlineTestPanel"
 
 function buildScopeQuery(systemKind?: SkillSystemKind): string {
   return systemKind ? `?system_kind=${systemKind}` : ""
@@ -365,6 +367,31 @@ export const SkillMiniIde = React.forwardRef<
         }}
         onStreamComplete={handleAiComplete}
         onStreamCancel={handleAiCancel}
+      />
+
+      <InlineTestPanel
+        skillSlug={skillSlug}
+        versionNumber={versionNumber}
+        systemKind={systemKind}
+        canWrite={canWrite}
+      />
+
+      <ExampleSkillsBrowser
+        isOpen={false}
+        onImport={(example) => {
+          // Apply example's first file content to the currently selected file
+          const files = example.files
+          if (files.length === 0) return
+          const firstFile = files[0]!
+          if (selectedPath) {
+            setEditedContent((prev) => ({ ...prev, [selectedPath]: firstFile.content }))
+            toast.success(`Applied example "${example.title}" to ${selectedPath}`)
+          } else {
+            setEditedContent((prev) => ({ ...prev, [firstFile.path]: firstFile.content }))
+            setSelectedPath(firstFile.path)
+            toast.success(`Applied example "${example.title}" (${files.length} files)`)
+          }
+        }}
       />
     </div>
   )

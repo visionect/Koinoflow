@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { SkillFrontmatter } from "@/types"
 
+import { SchemaEditor } from "@/components/skills/editor/SchemaEditor"
+
 type FrontmatterFormProps = {
   value: SkillFrontmatter
   onChange: (value: SkillFrontmatter) => void
@@ -121,6 +123,8 @@ export function FrontmatterForm({ value, onChange }: FrontmatterFormProps) {
             ))}
           </div>
         </div>
+
+        <SchemaEditor value={value.schema as Record<string, unknown> | null} onChange={(schema) => updateField("schema", schema ?? null)} />
       </div>
     </div>
   )
