@@ -1582,6 +1582,68 @@ def create_skill(request, payload: CreateSkillIn):
     return Status(201, _skill_detail_out(skill))
 
 
+# ── AI-Assisted Skill Generation ─────────────────────────────────────────
+# Registered BEFORE /skills/{slug} so Django Ninja routes by static path first;
+# otherwise POST /skills/ai-generate matches /skills/{slug} (slug="ai-generate")
+# whose only methods are GET/PATCH/DELETE → 405.
+
+
+class AiGenerateSkillIn(Schema):
+    """Input for the AI-assisted skill generation endpoint."""
+
+    instruction: str = Field(
+        ...,
+        min_length=10,
+        max_length=4000,
+        description="Natural language description of the skill to generate.",
+    )
+
+
+@router.post(
+    "/skills/ai-generate",
+    auth=api_or_session,
+    throttle=[MutationThrottle()],
+)
+def ai_generate_skill(
+    request,
+    payload: AiGenerateSkillIn,
+):
+    """Stream AI-assisted skill generation from a natural language description.
+
+    Uses Claude Sonnet 4.6 on Vertex AI to generate a complete SKILL.md from
+    the user's instruction. Rate limited per workspace.
+    """
+    from apps.skills.ai_generate import (
+        check_rate_limit,
+        stream_ai_generate,
+    )
+
+    workspace = request.workspace
+    if not workspace:
+        return Status(400, {"detail": "Workspace context is required."})
+
+    limit_status = check_rate_limit(workspace)
+    if not limit_status["allowed"]:
+        return Status(429, {"detail": limit_status["reason"]})
+
+    def event_stream():
+        yield from stream_ai_generate(
+            instruction=payload.instruction,
+            workspace=workspace,
+            user=request.user,
+        )
+
+    response = StreamingHttpResponse(
+        event_stream(),
+        content_type="text/event-stream; charset=utf-8",
+    )
+    response["Cache-Control"] = "no-cache, no-transform"
+    response["X-Accel-Buffering"] = "no"
+    response["X-AI-Remaining-Daily"] = str(limit_status["remaining"])
+    response["X-RateLimit-Remaining"] = str(limit_status["remaining"])
+    return response
+
+
 @router.get(
     "/skills/{slug}",
     response=SkillDetailOut,
@@ -3293,68 +3355,6 @@ def _skill_agent_deployment_out(skill) -> dict:
 def get_skill_agent_deployment(request, slug: str, system_kind: str | None = ""):
     skill = _get_skill(request, slug, system_kind=system_kind)
     return _skill_agent_deployment_out(skill)
-
-
-# ── AI-Assisted Skill Generation ─────────────────────────────────────────
-
-
-class AiGenerateSkillIn(Schema):
-    """Input for the AI-assisted skill generation endpoint."""
-
-    description: str = Field(
-        ...,
-        min_length=10,
-        max_length=4000,
-        description="Natural language description of the skill to generate.",
-    )
-
-
-@router.post(
-    "/skills/ai-generate",
-    auth=api_or_session,
-    throttle=[MutationThrottle()],
-)
-def ai_generate_skill(
-    request,
-    payload: AiGenerateSkillIn,
-):
-    """Stream AI-assisted skill generation from a natural language description.
-
-    Uses Claude Sonnet 4.6 on Vertex AI to generate a complete SKILL.md from
-    the user's description. The generated skill is saved as a draft.
-
-    Rate limited to 10 generations per day and 3 per hour per workspace.
-    """
-    from apps.skills.ai_generate import (
-        check_rate_limit,
-        stream_ai_generate,
-    )
-
-    workspace = request.workspace
-    if not workspace:
-        return Status(400, {"detail": "Workspace context is required."})
-
-    # Check rate limit
-    limit_status = check_rate_limit(workspace)
-    if not limit_status["allowed"]:
-        return Status(429, {"detail": limit_status["reason"]})
-
-    # Streaming SSE response
-    def event_stream():
-        yield from stream_ai_generate(
-            description=payload.description,
-            workspace=workspace,
-            user=request.user,
-        )
-
-    response = StreamingHttpResponse(
-        event_stream(),
-        content_type="text/event-stream; charset=utf-8",
-    )
-    response["Cache-Control"] = "no-cache, no-transform"
-    response["X-Accel-Buffering"] = "no"
-    response["X-AI-Remaining-Daily"] = str(limit_status["remaining"])
-    return response
 
 
 @router.put(
