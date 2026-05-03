@@ -384,7 +384,7 @@ export function FileTreeBrowser(props: FileTreeBrowserProps) {
                 <Label htmlFor="filetree-new-type" className="text-xs">
                   File type
                 </Label>
-                <Select value={newFileType} onValueChange={setNewFileType}>
+                <Select value={newFileType} onValueChange={(v) => setNewFileType(v as FileTypeOption)}>
                   <SelectTrigger id="filetree-new-type" className="h-7 text-xs">
                     <SelectValue />
                   </SelectTrigger>

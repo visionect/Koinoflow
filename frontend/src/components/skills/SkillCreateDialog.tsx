@@ -1,17 +1,18 @@
 import * as React from "react"
 
-import { ChevronDownIcon, ChevronRightIcon, FileTextIcon, FolderArchiveIcon } from "lucide-react"
+import { ChevronDownIcon, ChevronRightIcon, FileTextIcon, FolderArchiveIcon, SparklesIcon } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
 import { apiFetch, useCreateSkill, useDepartments, useWorkspaceMembers } from "@/api/client"
 import type { SkillImportData } from "@/hooks/use-skill-import"
+import { AiSkillGenerator } from "@/components/skills/AiSkillGenerator"
 import { FileTreeBrowser } from "@/components/skills/FileTreeBrowser"
 import { VisibilityScopeSelector } from "@/components/skills/VisibilityScopeSelector"
 import { groupDepartmentsByTeam } from "@/lib/skill-visibility"
 import { buildWorkspacePath, getDisplayName, slugify } from "@/lib/format"
 import { cn } from "@/lib/utils"
-import type { SkillVersion, SkillVisibility, VersionFile } from "@/types"
+import type { SkillVersion, SkillVisibility, VersionFile, VersionFileInput } from "@/types"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
@@ -43,6 +44,15 @@ type SkillCreateDialogProps = {
   importData?: SkillImportData | null
   onImportConsumed?: () => void
 }
+
+type AiGenerationState =
+  | { active: false }
+  | {
+      active: true
+      draft: string
+      skillSlug: string
+      frontmatterYaml: string
+    }
 
 function ImportFrontmatterPreview({ data }: { data: SkillImportData }) {
   const [expanded, setExpanded] = React.useState(false)
@@ -180,6 +190,8 @@ export function SkillCreateDialog({
   const departmentsQuery = useDepartments()
   const membersQuery = useWorkspaceMembers()
 
+  const aiGeneratorRef = React.useRef<{ isStreaming: () => boolean; cancel: () => void } | null>(null)
+
   const [departmentId, setDepartmentId] = React.useState(defaultDepartmentId ?? "")
   const [selectedTeamSlug, setSelectedTeamSlug] = React.useState("")
   const [visibility, setVisibility] = React.useState<SkillVisibility>("department")
@@ -190,8 +202,10 @@ export function SkillCreateDialog({
   const [description, setDescription] = React.useState("")
   const [ownerId, setOwnerId] = React.useState<string>("unassigned")
   const [isSubmitting, setIsSubmitting] = React.useState(false)
+  const [aiGeneration, setAiGeneration] = React.useState<AiGenerationState>({ active: false })
 
   const isImport = Boolean(importData)
+  const isAiWriting = aiGeneration.active
 
   const selectedDepartment = React.useMemo(
     () => departmentsQuery.data?.find((d) => d.id === departmentId),
@@ -214,6 +228,7 @@ export function SkillCreateDialog({
       setSelectedTeamSlug("")
       setVisibility("department")
       setSharedWithIds(new Set())
+      setAiGeneration({ active: false })
     }
   }, [defaultDepartmentId, open])
 
@@ -226,6 +241,45 @@ export function SkillCreateDialog({
       setOwnerId("unassigned")
     }
   }, [open, importData])
+
+  function handleAiStreamUpdate(draft: string) {
+    setAiGeneration((prev) =>
+      prev.active
+        ? { ...prev, draft }
+        : prev,
+    )
+  }
+
+  function handleAiComplete(skillSlug: string, contentMd: string, frontmatterYaml: string) {
+    // Parse the AI-generated content to extract title, slug, description from frontmatter
+    const titleMatch = contentMd.match(/^name:\s*(.+)$/m)
+    const descMatch = contentMd.match(/^description:\s*(.+)$/m)
+    const aiTitle = titleMatch?.[1]?.trim()
+    const aiDesc = descMatch?.[1]?.trim()
+
+    if (aiTitle && !title) {
+      setTitle(aiTitle)
+      setSlugTouched(false)
+    }
+    if (aiDesc && !description) {
+      setDescription(aiDesc)
+    }
+
+    setAiGeneration({
+      active: true,
+      draft: contentMd,
+      skillSlug,
+      frontmatterYaml,
+    })
+  }
+
+  function handleAiCancel() {
+    setAiGeneration({ active: false })
+  }
+
+  function resetAiGeneration() {
+    setAiGeneration({ active: false })
+  }
 
   React.useEffect(() => {
     if (!slugTouched) {
@@ -242,6 +296,7 @@ export function SkillCreateDialog({
     setVisibility("department")
     setSelectedTeamSlug("")
     setSharedWithIds(new Set())
+    resetAiGeneration()
     onImportConsumed?.()
   }
 
@@ -263,19 +318,42 @@ export function SkillCreateDialog({
         shared_with_ids: [...sharedWithIds],
       })
 
-      if (importData?.contentMd) {
+      let contentMd = ""
+      let frontmatterYaml = ""
+      let supportFiles: VersionFile[] | VersionFileInput[] | undefined
+
+      if (isAiWriting && aiGeneration.active) {
+        // Use AI-generated content
+        contentMd = aiGeneration.draft
+        frontmatterYaml = aiGeneration.frontmatterYaml
+      } else if (importData?.contentMd) {
+        // Use imported content
+        contentMd = importData.contentMd
+        frontmatterYaml = importData.frontmatterYaml ?? ""
+        supportFiles = importData.supportFiles?.length ? importData.supportFiles : undefined
+      }
+
+      if (contentMd) {
         await apiFetch<SkillVersion>(`/skills/${skill.slug}/versions`, {
           method: "POST",
           body: JSON.stringify({
-            content_md: importData.contentMd,
-            frontmatter_yaml: importData.frontmatterYaml ?? "",
-            change_summary: "Imported from .skill file",
-            files: importData.supportFiles?.length ? importData.supportFiles : undefined,
+            content_md: contentMd,
+            frontmatter_yaml: frontmatterYaml,
+            change_summary: isAiWriting
+              ? "AI-generated skill content"
+              : "Imported from .skill file",
+            files: supportFiles,
           }),
         })
       }
 
-      toast.success(isImport ? "Skill imported successfully" : "Skill created")
+      toast.success(
+        isAiWriting
+          ? "AI-generated skill created"
+          : isImport
+            ? "Skill imported successfully"
+            : "Skill created",
+      )
       onOpenChange(false)
       resetForm()
       navigate(buildWorkspacePath(workspaceSlug, `/skills/${skill.slug}`))
@@ -303,7 +381,9 @@ export function SkillCreateDialog({
           <DialogDescription>
             {isImport
               ? "Review the pre-filled details from the imported file, then confirm to create the skill."
-              : "Capture the metadata first, then jump into the editor to write the operational runbook."}
+              : isAiWriting
+                ? "AI is generating your skill content. Review and edit below."
+                : "Capture the metadata first, then jump into the editor to write the operational runbook."}
           </DialogDescription>
         </DialogHeader>
 
@@ -319,6 +399,53 @@ export function SkillCreateDialog({
         {isImport && importData?.supportFiles && importData.supportFiles.length > 0 ? (
           <ImportFilePreview files={importData.supportFiles} />
         ) : null}
+
+        {!isImport && !isAiWriting && (
+          <div className="rounded-lg border border-dashed bg-muted/20 p-4">
+            <div className="flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Write from scratch</p>
+                <p className="text-xs text-muted-foreground">
+                  Create a new skill with manual input or AI-assisted generation.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="text-xs">Manual</Badge>
+                <Badge variant="outline" className="text-xs">
+                  <SparklesIcon className="mr-1 size-3 text-violet-500" />
+                  AI (Sonnet 4.6)
+                </Badge>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isAiWriting && aiGeneration.active ? (
+          <div className="space-y-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-3">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <SparklesIcon className="size-4 text-violet-500" />
+              AI-generated skill: <code className="font-mono text-xs">{aiGeneration.skillSlug}</code>
+            </div>
+            <pre className="max-h-[300px] overflow-auto rounded-md bg-background p-3 text-xs font-mono text-muted-foreground">
+              {aiGeneration.draft}
+            </pre>
+            <p className="text-[10px] text-muted-foreground">
+              The content above will be saved as the first version when you click &ldquo;Create and edit&rdquo;.
+              You can also edit the metadata (title, description) below.
+            </p>
+          </div>
+        ) : null}
+
+        {/* AI generation panel — shown when no import and no AI generation active */}
+        {!isImport && !isAiWriting && (
+          <AiSkillGenerator
+            ref={aiGeneratorRef}
+            workspaceSlug={workspaceSlug ?? ""}
+            onStreamUpdate={handleAiStreamUpdate}
+            onStreamComplete={handleAiComplete}
+            onStreamCancel={handleAiCancel}
+          />
+        )}
 
         <div className="space-y-4">
           <div className="space-y-2">
@@ -491,26 +618,30 @@ export function SkillCreateDialog({
           </Collapsible>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => handleClose(false)}>
-            Cancel
-          </Button>
-          <Button
-            disabled={
-              (visibility === "department" && !departmentId) ||
-              (visibility === "team" && !selectedTeamSlug) ||
-              (visibility === "workspace" &&
-                !defaultDepartmentId &&
-                !departmentsQuery.data?.length) ||
-              !title.trim() ||
-              !slug.trim() ||
-              pending
-            }
-            onClick={() => void handleCreateSkill()}
-          >
-            {pending ? "Creating..." : isImport ? "Import and view" : "Create and edit"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => handleClose(false)}>
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                (visibility === "department" && !departmentId) ||
+                (visibility === "team" && !selectedTeamSlug) ||
+                (visibility === "workspace" &&
+                  !defaultDepartmentId &&
+                  !departmentsQuery.data?.length) ||
+                !title.trim() ||
+                !slug.trim() ||
+                pending
+              }
+              onClick={() => void handleCreateSkill()}
+            >
+              {pending
+                ? "Creating..."
+                : isImport
+                  ? "Import and view"
+                  : "Create and edit"}
+            </Button>
+          </DialogFooter>
       </DialogContent>
     </Dialog>
   )
