@@ -2,6 +2,7 @@ from django.contrib.postgres.indexes import GinIndex
 from django.core.validators import RegexValidator
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 from pgvector.django import HnswIndex, VectorField
 
 from apps.common.models import BaseModel
@@ -557,3 +558,105 @@ class VersionFile(BaseModel):
 
     def __str__(self):
         return f"{self.version} — {self.path}"
+
+
+# ── AI usage tracking ─────────────────────────────────────────────────────
+
+
+class AIUsageLog(BaseModel):
+    """Tracks AI API usage per workspace to enforce rate limits.
+
+    Each row represents one AI-assisted operation (skill generation or file edit).
+    The daily limit is enforced by counting rows per workspace within the last 24 hours.
+    """
+
+    class UsageType(models.TextChoices):
+        SKILL_GENERATION = "skill_generation", "Skill generation"
+        FILE_EDIT = "file_edit", "File edit"
+
+    workspace = models.ForeignKey(
+        "orgs.Workspace",
+        on_delete=models.CASCADE,
+        related_name="ai_usage_logs",
+    )
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="ai_usage_logs",
+    )
+    usage_type = models.CharField(
+        max_length=32,
+        choices=UsageType.choices,
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+    )
+
+    class Meta:
+        db_table = "ai_usage_logs"
+        indexes = [
+            models.Index(
+                fields=["workspace", "created_at"],
+                name="ai_usage_ws_created",
+            ),
+            models.Index(
+                fields=["workspace", "usage_type", "created_at"],
+                name="ai_usage_ws_type_created",
+            ),
+        ]
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.usage_type} for workspace {self.workspace_id} at {self.created_at}"
+
+    @property
+    def is_within_last_n_hours(self) -> bool:
+        """Check if this log is within the last N hours (for hourly limits)."""
+        return (timezone.now() - self.created_at).total_seconds() < 3600
+
+    @property
+    def is_within_last_24h(self) -> bool:
+        """Check if this log is within the last 24 hours (for daily limits)."""
+        return (timezone.now() - self.created_at).total_seconds() < 86400
+
+    @classmethod
+    def count_last_24h(cls, workspace, usage_type):
+        """Count AI usage logs for a workspace in the last 24 hours."""
+        cutoff = timezone.now() - timezone.timedelta(hours=24)
+        return cls.objects.filter(
+            workspace=workspace,
+            usage_type=usage_type,
+            created_at__gte=cutoff,
+        ).count()
+
+    @classmethod
+    def count_last_hour(cls, workspace, usage_type):
+        """Count AI usage logs for a workspace in the last hour."""
+        cutoff = timezone.now() - timezone.timedelta(hours=1)
+        return cls.objects.filter(
+            workspace=workspace,
+            usage_type=usage_type,
+            created_at__gte=cutoff,
+        ).count()
+
+    @classmethod
+    def record_usage(cls, workspace, user, usage_type):
+        """Record an AI usage event and return the count."""
+        return cls.objects.create(
+            workspace=workspace,
+            user=user,
+            usage_type=usage_type,
+        )
+
+    @classmethod
+    def get_remaining_daily(cls, workspace, usage_type, limit):
+        """Get remaining allowed operations for today."""
+        current = cls.count_last_24h(workspace, usage_type)
+        return max(0, limit - current)
+
+    @classmethod
+    def get_remaining_hourly(cls, workspace, usage_type, limit):
+        """Get remaining allowed operations for this hour."""
+        current = cls.count_last_hour(workspace, usage_type)
+        return max(0, limit - current)
