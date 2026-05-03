@@ -1377,7 +1377,7 @@ export function SkillViewPage() {
       )}
 
       <Dialog open={metadataOpen} onOpenChange={setMetadataOpen}>
-        <DialogContent>
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Edit skill metadata</DialogTitle>
             <DialogDescription>
@@ -1433,7 +1433,7 @@ export function SkillViewPage() {
       </Dialog>
 
       <Dialog open={publishOpen} onOpenChange={setPublishOpen}>
-        <DialogContent>
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>
               Publish {latestVersionNumber ? `v${latestVersionNumber}` : "latest version"}

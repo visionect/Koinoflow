@@ -342,7 +342,7 @@ function PromoteDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent size="sm" className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Promote to skill</DialogTitle>
           <DialogDescription>

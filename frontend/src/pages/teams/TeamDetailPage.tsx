@@ -226,7 +226,7 @@ export function TeamDetailPage() {
       )}
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Edit team</DialogTitle>
             <DialogDescription>Update the team name shown across the workspace.</DialogDescription>
@@ -254,7 +254,7 @@ export function TeamDetailPage() {
       </Dialog>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Create department</DialogTitle>
             <DialogDescription>

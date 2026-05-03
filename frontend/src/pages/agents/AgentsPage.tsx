@@ -128,7 +128,7 @@ function CreateAgentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent size="sm">
         <DialogHeader>
           <DialogTitle>Create agent</DialogTitle>
           <DialogDescription>
@@ -229,7 +229,7 @@ function CreateAgentSkillDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent size="2xl">
         <DialogHeader>
           <DialogTitle>Create agent skill</DialogTitle>
           <DialogDescription>
@@ -354,7 +354,7 @@ function ImportAgentSkillDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent size="2xl">
         <DialogHeader>
           <DialogTitle>Import agent skill</DialogTitle>
           <DialogDescription>

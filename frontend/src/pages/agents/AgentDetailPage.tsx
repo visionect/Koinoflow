@@ -405,7 +405,7 @@ export function AgentDetailPage() {
           if (!open) setRemovingSkill(null)
         }}
       >
-        <DialogContent>
+        <DialogContent size="sm">
           <DialogHeader>
             <DialogTitle>Remove skill from agent</DialogTitle>
             <DialogDescription>

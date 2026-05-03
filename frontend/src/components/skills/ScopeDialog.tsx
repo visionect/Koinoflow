@@ -61,7 +61,7 @@ export function ScopeDialog({ open, onOpenChange, skill, isAdmin }: ScopeDialogP
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent size="sm" className="max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Change scope &amp; sharing</DialogTitle>
           <DialogDescription>
