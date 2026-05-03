@@ -54,6 +54,18 @@ type AiGenerationState =
       frontmatterYaml: string
     }
 
+/**
+ * Pull the first ```python``` (or ```py```) fenced block out of an AI-generated
+ * SKILL.md so we can persist it as the runnable entrypoint file. The system
+ * prompt instructs Sonnet to embed a complete, sandbox-runnable run.py — this
+ * extracts it. Returns null if no python block is present.
+ */
+function extractPythonEntrypoint(contentMd: string): string | null {
+  const match = contentMd.match(/```(?:python|py)\s*\n([\s\S]*?)\n```/)
+  const body = match?.[1]?.trim()
+  return body && body.length > 0 ? body : null
+}
+
 function ImportFrontmatterPreview({ data }: { data: SkillImportData }) {
   const [expanded, setExpanded] = React.useState(false)
   const { frontmatter } = data
@@ -323,9 +335,18 @@ export function SkillCreateDialog({
       let supportFiles: VersionFile[] | VersionFileInput[] | undefined
 
       if (isAiWriting && aiGeneration.active) {
-        // Use AI-generated content
         contentMd = aiGeneration.draft
         frontmatterYaml = aiGeneration.frontmatterYaml
+        const entrypointBody = extractPythonEntrypoint(contentMd)
+        if (entrypointBody) {
+          supportFiles = [
+            {
+              path: "run.py",
+              content: entrypointBody,
+              file_type: "python",
+            },
+          ]
+        }
       } else if (importData?.contentMd) {
         // Use imported content
         contentMd = importData.contentMd
