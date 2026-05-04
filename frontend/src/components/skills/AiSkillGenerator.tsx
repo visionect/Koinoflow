@@ -278,7 +278,7 @@ export const AiSkillGenerator = React.forwardRef<
         value={instruction}
         onChange={(event) => setInstruction(event.target.value)}
         rows={6}
-        disabled={streaming}
+        disabled={streaming || hasDraft}
         placeholder={
           `Describe the skill you want to create. Be specific about:\n` +
           `• What the skill does (e.g., "Deploy a Docker container to Kubernetes")\n` +
@@ -287,7 +287,7 @@ export const AiSkillGenerator = React.forwardRef<
         }
         className={cn(
           "min-h-[140px] border-violet-500/30 bg-background text-sm leading-relaxed",
-          streaming ? "opacity-70" : "",
+          streaming || hasDraft ? "opacity-70" : "",
         )}
         onKeyDown={(event) => {
           if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
@@ -296,6 +296,43 @@ export const AiSkillGenerator = React.forwardRef<
           }
         }}
       />
+
+      {hasDraft && (
+        <div className="rounded-lg border border-violet-500/20 bg-background">
+          <div className="flex items-center justify-between border-b border-violet-500/20 px-3 py-1.5">
+            <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+              {streaming ? (
+                <>
+                  <Loader2Icon className="size-3 animate-spin text-violet-500" />
+                  Generating…
+                </>
+              ) : (
+                <>
+                  <CheckIcon className="size-3 text-violet-500" />
+                  Generated
+                </>
+              )}
+              {skillSlug ? (
+                <code className="rounded bg-violet-500/10 px-1 text-[10px] text-violet-600">
+                  {skillSlug}
+                </code>
+              ) : null}
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {draft.length} chars
+            </span>
+          </div>
+          <pre className="max-h-[320px] overflow-auto p-3 text-[11px] font-mono leading-relaxed text-foreground">
+            {draft}
+          </pre>
+          {!streaming && (
+            <div className="border-t border-violet-500/10 px-3 py-1.5 text-[10px] text-muted-foreground">
+              Content will be saved as the first version when you click &ldquo;Create and edit&rdquo;.
+              You can also edit the metadata (title, description) below.
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-[11px] text-muted-foreground">
