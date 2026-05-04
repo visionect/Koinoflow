@@ -29,7 +29,7 @@ api = NinjaAPI(
 )
 
 
-@api.get("/health", auth=None, tags=["health"])
+@api.get("/health", auth=None, tags=["health"], throttle=[])
 def health(request):
     """Returns OK when the service is running."""
     return {"status": "ok"}
