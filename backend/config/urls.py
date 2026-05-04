@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.http import HttpResponse
+from django.template import loader
 from django.urls import include, path
 from oauth2_provider.views import TokenView
 
@@ -11,6 +13,13 @@ from apps.accounts.oauth_views import (
 from apps.common.internal_tasks import run_scheduled_task, run_task
 
 from .api import api
+
+
+def spa_fallback(request):
+    """Serve the SPA index.html for any unmatched route so the client-side router can take over."""
+    template = loader.get_template("spa_index.html")
+    return HttpResponse(template.render(request=request))
+
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -35,4 +44,6 @@ urlpatterns = [
     path("authorize", KoinoflowAuthorizationView.as_view()),
     path("token", TokenView.as_view()),
     path("register", dynamic_client_registration),
+    # SPA fallback: serve index.html for any unmatched route (must be last)
+    path("<path:rest>", spa_fallback),
 ]
