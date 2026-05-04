@@ -254,21 +254,17 @@ export function SkillCreateDialog({
     }
   }, [open, importData])
 
-  function handleAiStreamUpdate(draft: string) {
-    setAiGeneration((prev) =>
-      prev.active
-        ? { ...prev, draft }
-        : prev,
-    )
+  function parseFrontmatterDraft(draft: string) {
+    const titleMatch = draft.match(/^name:\s*(.+)$/m)
+    const descMatch = draft.match(/^description:\s*(.+)$/m)
+    return {
+      aiTitle: titleMatch?.[1]?.trim() ?? null,
+      aiDesc: descMatch?.[1]?.trim() ?? null,
+    }
   }
 
-  function handleAiComplete(skillSlug: string, contentMd: string, frontmatterYaml: string) {
-    // Parse the AI-generated content to extract title, slug, description from frontmatter
-    const titleMatch = contentMd.match(/^name:\s*(.+)$/m)
-    const descMatch = contentMd.match(/^description:\s*(.+)$/m)
-    const aiTitle = titleMatch?.[1]?.trim()
-    const aiDesc = descMatch?.[1]?.trim()
-
+  function handleAiStreamUpdate(draft: string) {
+    const { aiTitle, aiDesc } = parseFrontmatterDraft(draft)
     if (aiTitle && !title) {
       setTitle(aiTitle)
       setSlugTouched(false)
@@ -276,7 +272,17 @@ export function SkillCreateDialog({
     if (aiDesc && !description) {
       setDescription(aiDesc)
     }
+    setAiGeneration({
+      active: true,
+      draft,
+      skillSlug: aiGeneration.active && aiGeneration.skillSlug
+        ? aiGeneration.skillSlug
+        : `draft-${Math.random().toString(36).slice(2, 8)}`,
+      frontmatterYaml: "",
+    })
+  }
 
+  function handleAiComplete(skillSlug: string, contentMd: string, frontmatterYaml: string) {
     setAiGeneration({
       active: true,
       draft: contentMd,
@@ -441,24 +447,7 @@ export function SkillCreateDialog({
           </div>
         )}
 
-        {isAiWriting && aiGeneration.active ? (
-          <div className="space-y-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-3">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <SparklesIcon className="size-4 text-violet-500" />
-              AI-generated skill: <code className="font-mono text-xs">{aiGeneration.skillSlug}</code>
-            </div>
-            <pre className="max-h-[300px] overflow-auto rounded-md bg-background p-3 text-xs font-mono text-muted-foreground">
-              {aiGeneration.draft}
-            </pre>
-            <p className="text-[10px] text-muted-foreground">
-              The content above will be saved as the first version when you click &ldquo;Create and edit&rdquo;.
-              You can also edit the metadata (title, description) below.
-            </p>
-          </div>
-        ) : null}
-
-        {/* AI generation panel — shown when no import and no AI generation active */}
-        {!isImport && !isAiWriting && (
+        {!isImport && (
           <AiSkillGenerator
             ref={aiGeneratorRef}
             workspaceSlug={workspaceSlug ?? ""}
