@@ -454,8 +454,7 @@ async def test_apply_skill_update_extracts_run_py_as_support_file():
         "    return 0\n\nif __name__ == '__main__':\n    raise SystemExit(main())"
     )
     proposed_markdown = (
-        "---\nname: my_skill\n---\n\n## Entrypoint (run.py)\n\n"
-        f"```python\n{entrypoint_code}\n```"
+        f"---\nname: my_skill\n---\n\n## Entrypoint (run.py)\n\n```python\n{entrypoint_code}\n```"
     )
     proposal = json.loads(
         await propose_skill_update(
