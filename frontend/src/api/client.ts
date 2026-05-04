@@ -48,6 +48,7 @@ import type {
   SkillUsageSummary,
   SkillExecutionRun,
   SkillExecutionRunLogs,
+  SkillExecutionRunOutput,
   SkillExecutionSpec,
   SkillSecretStatus,
   SandboxOverview,
@@ -247,6 +248,7 @@ export const queryKeys = {
       ["skills", "execution-runs", slug, skillScopeKey(systemKind)] as const,
     executionRun: (runId: string) => ["skills", "execution-run", runId] as const,
     executionRunLogs: (runId: string) => ["skills", "execution-run", runId, "logs"] as const,
+    executionRunOutput: (runId: string) => ["skills", "execution-run", runId, "output"] as const,
     secrets: (slug: string, systemKind?: SkillSystemKind) =>
       ["skills", "secrets", slug, skillScopeKey(systemKind)] as const,
     agentDeployment: (slug: string, systemKind?: SkillSystemKind) =>
@@ -851,6 +853,21 @@ export function useSkillExecutionRunLogs(
     enabled: Boolean(runId),
     refetchInterval: isActive ? 3000 : false,
     staleTime: isActive ? 0 : 5_000,
+  })
+}
+
+export function useSkillExecutionRunOutput(
+  runId: string | null | undefined,
+  options: { enabled?: boolean } = {},
+) {
+  const { enabled = true } = options
+  return useQuery({
+    queryKey: runId
+      ? queryKeys.skills.executionRunOutput(runId)
+      : (["skills", "execution-run", "disabled", "output"] as const),
+    queryFn: () => apiFetch<SkillExecutionRunOutput>(`/skill-executions/${runId}/output`),
+    enabled: Boolean(runId) && enabled,
+    staleTime: 30_000,
   })
 }
 

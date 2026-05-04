@@ -5,7 +5,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   CopyIcon,
-  ExternalLinkIcon,
+  DownloadIcon,
   RotateCwIcon,
   ScrollTextIcon,
   SquareIcon,
@@ -13,7 +13,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { useSkillExecutionRunLogs } from "@/api/client"
+import { useSkillExecutionRunLogs, useSkillExecutionRunOutput } from "@/api/client"
 import { Button } from "@/components/ui/button"
 import {
   Collapsible,
@@ -26,12 +26,14 @@ import { cn } from "@/lib/utils"
 import type { SkillExecutionRun } from "@/types"
 
 import { RunStatusBadge } from "./RunStatusBadge"
-import {
-  buildCloudLoggingUrl,
-  buildGcsConsoleUrl,
-  formatRunDuration,
-  isActiveStatus,
-} from "./runStatus"
+import { formatRunDuration, isActiveStatus } from "./runStatus"
+
+function formatBytes(bytes: number | null | undefined): string {
+  if (bytes == null || Number.isNaN(bytes)) return "—"
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
 
 function CopyButton({
   value,
@@ -199,6 +201,93 @@ function LogsPanel({
   )
 }
 
+function FullOutputPanel({
+  fetchFullOutput,
+  onLoad,
+  query,
+}: {
+  fetchFullOutput: boolean
+  onLoad: () => void
+  query: ReturnType<typeof useSkillExecutionRunOutput>
+}) {
+  if (!fetchFullOutput) {
+    return (
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+        <span>Output exceeded the inline preview cap. Load it to view in the app.</span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onLoad}
+          className="h-7 gap-1 text-xs"
+        >
+          <DownloadIcon className="size-3" /> Load full output
+        </Button>
+      </div>
+    )
+  }
+  if (query.isLoading) {
+    return (
+      <p className="mt-1 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+        Loading output…
+      </p>
+    )
+  }
+  if (query.isError) {
+    return (
+      <p className="mt-1 rounded-md border bg-muted/40 p-3 text-xs text-destructive">
+        Could not load output. Try again later.
+      </p>
+    )
+  }
+  const data = query.data
+  if (!data) return null
+  if (data.source === "too_large") {
+    const json =
+      typeof data.output === "string"
+        ? data.output
+        : data.output != null
+          ? JSON.stringify(data.output, null, 2)
+          : ""
+    return (
+      <p className="mt-1 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+        Output is {formatBytes(data.size_bytes)} — too large to display inline.
+        {json ? " Showing the inline copy below; full payload is retained for the run’s lifetime." : ""}
+      </p>
+    )
+  }
+  if (data.source === "missing") {
+    return (
+      <p className="mt-1 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+        Output file is not yet available — the run may still be finalizing.
+      </p>
+    )
+  }
+  if (!data.available) {
+    return (
+      <p className="mt-1 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+        Output is not available for this run.
+      </p>
+    )
+  }
+  const formatted =
+    typeof data.output === "string"
+      ? data.output
+      : data.output != null
+        ? JSON.stringify(data.output, null, 2)
+        : ""
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+        <span>Full output · {formatBytes(data.size_bytes)}</span>
+      </div>
+      <pre className="max-h-[360px] overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-[11px] leading-relaxed">
+        {formatted}
+      </pre>
+    </div>
+  )
+}
+
 export function RunDetailView({
   run,
   onRerun,
@@ -215,10 +304,13 @@ export function RunDetailView({
   const [showInputs, setShowInputs] = React.useState(false)
   const [showOutput, setShowOutput] = React.useState(true)
   const [showResource, setShowResource] = React.useState(false)
+  const [fetchFullOutput, setFetchFullOutput] = React.useState(false)
   const isActive = isActiveStatus(run.status)
-  const cloudLogsUrl = buildCloudLoggingUrl(run.external_job_name)
-  const outputConsoleUrl = run.output_uri ? buildGcsConsoleUrl(run.output_uri) : null
-  const logsConsoleUrl = run.logs_uri ? buildGcsConsoleUrl(run.logs_uri) : null
+
+  const needsLargeOutputFetch = !run.output && Boolean(run.output_uri)
+  const fullOutputQuery = useSkillExecutionRunOutput(run.id, {
+    enabled: needsLargeOutputFetch && fetchFullOutput,
+  })
 
   const exitCode =
     typeof run.resource_usage?.exit_code === "number"
@@ -367,22 +459,12 @@ export function RunDetailView({
             <pre className="mt-1 max-h-[360px] overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-[11px] leading-relaxed">
               {JSON.stringify(run.output, null, 2)}
             </pre>
-          ) : run.output_uri ? (
-            <p className="mt-1 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
-              Output exceeded the inline size cap.{" "}
-              {outputConsoleUrl ? (
-                <a
-                  href={outputConsoleUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-primary hover:underline"
-                >
-                  Open in GCS <ExternalLinkIcon className="size-3" />
-                </a>
-              ) : (
-                <span className="break-all font-mono">{run.output_uri}</span>
-              )}
-            </p>
+          ) : needsLargeOutputFetch ? (
+            <FullOutputPanel
+              fetchFullOutput={fetchFullOutput}
+              onLoad={() => setFetchFullOutput(true)}
+              query={fullOutputQuery}
+            />
           ) : (
             <p className="mt-1 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
               {run.status === "succeeded" ? "Empty output." : "No output yet."}
@@ -414,24 +496,6 @@ export function RunDetailView({
             <div className="grid grid-cols-1 gap-x-4 px-3 sm:grid-cols-2">
               <StatField label="Run ID" value={run.id} mono copy={run.id} />
               <StatField
-                label="External job"
-                value={run.external_job_name || "—"}
-                mono
-                copy={run.external_job_name || null}
-              />
-              <StatField
-                label="Output URI"
-                value={run.output_uri || "—"}
-                mono
-                copy={run.output_uri || null}
-              />
-              <StatField
-                label="Logs URI"
-                value={run.logs_uri || "—"}
-                mono
-                copy={run.logs_uri || null}
-              />
-              <StatField
                 label="Expires"
                 value={run.expires_at ? formatDateTime(run.expires_at) : "—"}
               />
@@ -442,28 +506,6 @@ export function RunDetailView({
               {JSON.stringify(run.resource_usage, null, 2)}
             </pre>
           ) : null}
-          <div className="flex flex-wrap items-center gap-2 text-[11px]">
-            {cloudLogsUrl ? (
-              <a
-                href={cloudLogsUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-1 hover:bg-muted"
-              >
-                Open Cloud Logging <ExternalLinkIcon className="size-3" />
-              </a>
-            ) : null}
-            {logsConsoleUrl ? (
-              <a
-                href={logsConsoleUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-md border bg-muted/40 px-2 py-1 hover:bg-muted"
-              >
-                Open logs file in GCS <ExternalLinkIcon className="size-3" />
-              </a>
-            ) : null}
-          </div>
         </CollapsibleContent>
       </Collapsible>
     </div>

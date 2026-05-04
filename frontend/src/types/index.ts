@@ -347,6 +347,25 @@ export interface SkillExecutionRunLogs {
   source: "gcs" | "none" | "missing" | "unavailable" | "unsupported" | "error" | string
 }
 
+export interface SkillExecutionRunOutput {
+  run_id: string
+  status: SkillExecutionRunStatus
+  output: unknown | null
+  size_bytes: number
+  truncated: boolean
+  available: boolean
+  source:
+    | "inline"
+    | "gcs"
+    | "none"
+    | "missing"
+    | "unavailable"
+    | "unsupported"
+    | "too_large"
+    | "error"
+    | string
+}
+
 export type SandboxMinRole = "member" | "team_manager" | "admin"
 
 export interface SandboxSkillSummary {

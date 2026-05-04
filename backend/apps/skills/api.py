@@ -3,13 +3,14 @@ import binascii
 import difflib
 import hashlib
 import io
+import json
 import logging
 import mimetypes
 import posixpath
 import re
 import zipfile
 from datetime import timedelta
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from django.core.exceptions import ObjectDoesNotExist
@@ -428,6 +429,16 @@ class SkillExecutionRunLogsOut(Schema):
     run_id: str
     status: str
     logs: str
+    truncated: bool
+    available: bool
+    source: str
+
+
+class SkillExecutionRunOutputOut(Schema):
+    run_id: str
+    status: str
+    output: Any | None = None
+    size_bytes: int
     truncated: bool
     available: bool
     source: str
@@ -2308,6 +2319,82 @@ def get_skill_execution_run_logs(request, run_id: str):
         "logs": logs,
         "truncated": truncated,
         "available": available,
+        "source": source,
+    }
+
+
+# Cap how much output JSON we fetch from GCS into a synchronous response.
+# Anything larger gets reported as truncated so the UI can show a hint without
+# blocking the request loop on a multi-MB download.
+MAX_INLINE_OUTPUT_BYTES = 1024 * 1024
+
+
+def _fetch_run_output(
+    run: SkillExecutionRun,
+) -> tuple[Any | None, int, bool, str]:
+    """Return (output, size_bytes, truncated, source). Best-effort."""
+    if not run.output_uri:
+        return None, 0, False, "none"
+    if not run.output_uri.startswith("gs://"):
+        return None, 0, False, "unsupported"
+    try:
+        from google.cloud import storage  # type: ignore[import-not-found]
+
+        from apps.skills.execution_artifacts import split_gs_uri
+    except ImportError:
+        return None, 0, False, "unavailable"
+    try:
+        bucket_name, blob_name = split_gs_uri(run.output_uri)
+        client = storage.Client()
+        blob = client.bucket(bucket_name).blob(blob_name)
+        if not blob.exists(client):
+            return None, 0, False, "missing"
+        size = blob.size or 0
+        if size > MAX_INLINE_OUTPUT_BYTES:
+            return None, size, True, "too_large"
+        text = blob.download_as_text()
+        try:
+            return json.loads(text), size, False, "gcs"
+        except json.JSONDecodeError:
+            return text, size, False, "gcs"
+    except Exception as exc:  # pragma: no cover — defensive
+        logger.warning("Could not fetch execution output for run %s: %s", run.id, exc)
+        return None, 0, False, "error"
+
+
+@router.get(
+    "/skill-executions/{run_id}/output",
+    response=SkillExecutionRunOutputOut,
+    auth=api_or_session,
+    throttle=[ReadThrottle()],
+)
+def get_skill_execution_run_output(request, run_id: str):
+    """Fetch a run's full output JSON from object storage.
+
+    Used when the output exceeded the inline size cap on the run record itself —
+    keeps end-customer eyes on the in-app UI instead of a raw GCS console URL.
+    """
+    run = _load_run_for_caller(request, run_id)
+    if run.output is not None:
+        # Already inline on the run; no need to round-trip through GCS.
+        size = len(json.dumps(run.output, separators=(",", ":")).encode("utf-8"))
+        return {
+            "run_id": str(run.id),
+            "status": run.status,
+            "output": run.output,
+            "size_bytes": size,
+            "truncated": False,
+            "available": True,
+            "source": "inline",
+        }
+    output, size_bytes, truncated, source = _fetch_run_output(run)
+    return {
+        "run_id": str(run.id),
+        "status": run.status,
+        "output": output,
+        "size_bytes": size_bytes,
+        "truncated": truncated,
+        "available": source == "gcs",
         "source": source,
     }
 

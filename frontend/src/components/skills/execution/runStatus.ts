@@ -61,23 +61,3 @@ export function formatRunDuration(ms: number | null | undefined): string {
   return `${minutes}m ${seconds.toString().padStart(2, "0")}s`
 }
 
-export function buildCloudLoggingUrl(externalJobName: string): string | null {
-  if (!externalJobName) return null
-  // External job name format: projects/{project}/locations/{loc}/jobs/{job}/executions/{exec}
-  const match = externalJobName.match(
-    /^projects\/([^/]+)\/locations\/([^/]+)\/jobs\/([^/]+)\/executions\/([^/]+)$/,
-  )
-  if (!match) return null
-  const [, project, , jobName, executionName] = match
-  const filter =
-    `resource.type%3D%22cloud_run_job%22 ` +
-    `resource.labels.job_name%3D%22${jobName}%22 ` +
-    `labels.%22run.googleapis.com%2Fexecution_name%22%3D%22${executionName}%22`
-  return `https://console.cloud.google.com/logs/query;query=${filter}?project=${project}`
-}
-
-export function buildGcsConsoleUrl(uri: string): string | null {
-  if (!uri.startsWith("gs://")) return null
-  const path = uri.slice(5)
-  return `https://console.cloud.google.com/storage/browser/_details/${path}`
-}
