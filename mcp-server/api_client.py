@@ -1,6 +1,10 @@
+import re
+
 import httpx
 
 from config import API_BASE_URL, logger
+
+_PYTHON_FENCE_RE = re.compile(r"```(?:python|py)\s*\n([\s\S]*?)\n```")
 
 
 class KoinoflowAPIError(Exception):
@@ -149,15 +153,23 @@ class KoinoflowAPIClient:
         frontmatter_yaml: str,
         change_summary: str,
     ) -> dict:
+        body: dict = {
+            "content_md": content_md,
+            "frontmatter_yaml": frontmatter_yaml,
+            "change_summary": change_summary,
+        }
+        match = _PYTHON_FENCE_RE.search(content_md)
+        if match:
+            entrypoint_body = match.group(1).strip()
+            if entrypoint_body:
+                body["files"] = [
+                    {"path": "run.py", "content": entrypoint_body, "file_type": "python"}
+                ]
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 f"{self.base_url}/skills/{slug}/versions",
                 headers=self._headers(),
-                json={
-                    "content_md": content_md,
-                    "frontmatter_yaml": frontmatter_yaml,
-                    "change_summary": change_summary,
-                },
+                json=body,
             )
             if not response.is_success:
                 raise KoinoflowAPIError(response.status_code, response.text)

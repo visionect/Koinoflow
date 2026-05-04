@@ -433,6 +433,54 @@ async def test_apply_skill_update_creates_new_version():
     call_body = json.loads(create_route.calls[0].request.content)
     assert call_body["frontmatter_yaml"] == "owner: platform-team"
     assert call_body["content_md"] == "## Steps\n\n1. Run deploy script."
+    assert "files" not in call_body
+
+
+@respx.mock
+async def test_apply_skill_update_extracts_run_py_as_support_file():
+    _set_token_scope()
+    respx.get("http://testserver/api/v1/settings").mock(
+        return_value=Response(200, json={"allow_agent_skill_updates": True})
+    )
+    respx.get("http://testserver/api/v1/skills/my-skill").mock(
+        return_value=Response(200, json=PROCESS_DETAIL)
+    )
+    create_route = respx.post("http://testserver/api/v1/skills/my-skill/versions").mock(
+        return_value=Response(201, json={"id": "v-id", "version_number": 2})
+    )
+
+    entrypoint_code = (
+        "import json, sys\n\ndef main():\n    json.dump({}, sys.stdout)\n"
+        "    return 0\n\nif __name__ == '__main__':\n    raise SystemExit(main())"
+    )
+    proposed_markdown = (
+        f"---\nname: my_skill\n---\n\n## Entrypoint (run.py)\n\n```python\n{entrypoint_code}\n```"
+    )
+    proposal = json.loads(
+        await propose_skill_update(
+            slug="my-skill",
+            proposed_markdown=proposed_markdown,
+            change_summary="Initial skill with run.py.",
+        )
+    )
+
+    result = await apply_skill_update(
+        slug="my-skill",
+        proposed_markdown=proposed_markdown,
+        change_summary="Initial skill with run.py.",
+        approval_token=proposal["approval_token"],
+    )
+    payload = json.loads(result)
+
+    assert payload["status"] == "updated"
+    assert create_route.called
+    call_body = json.loads(create_route.calls[0].request.content)
+    assert "files" in call_body
+    files = call_body["files"]
+    assert len(files) == 1
+    assert files[0]["path"] == "run.py"
+    assert files[0]["file_type"] == "python"
+    assert entrypoint_code in files[0]["content"]
 
 
 @respx.mock
