@@ -397,7 +397,7 @@ def stream_ai_generate(
                 }
             ],
         ) as stream:
-            for chunk in stream.text.stream:
+            for chunk in stream.text_stream:
                 if not chunk:
                     continue
                 yield _sse("delta", {"text": chunk})
