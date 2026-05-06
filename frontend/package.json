@@ -43,7 +43,7 @@
     "zod": "4.3.6"
   },
   "devDependencies": {
-    "@axe-core/react": "^4.11.1",
+    "@axe-core/react": "^4.11.3",
     "@eslint/js": "9.39.4",
     "@fontsource-variable/geist-mono": "^5.2.7",
     "@hey-api/openapi-ts": "0.96.1",
