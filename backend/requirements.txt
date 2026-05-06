@@ -30,7 +30,7 @@ jsonschema>=4.23,<5.0
 # Capture AI extraction pipeline
 google-auth>=2.49.2,<3.0.0
 google-genai>=1.60.0,<2.0.0
-anthropic[vertex]>=0.52.0,<1.0.0
+anthropic[vertex]>=0.100.0,<1.0.0
 
 # Dev / CI
 ruff>=0.15.12,<1.0
